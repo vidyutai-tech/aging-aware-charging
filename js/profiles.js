@@ -2,35 +2,43 @@
 
 import { SPACE, clamp } from "./physics.js";
 
-/* Step changes may fall anywhere in the study bounds (32-90% charge). When
- * sp.socEnd is set, they are kept inside this charge instead, so a two-step or
- * three-step schedule really changes current before the charge ends. */
-function stageWindow(sp) {
-  const hiStudy = sp.socSwitchMax;
-  if (sp.socEnd == null) return { hi: hiStudy, stage: sp.minStageDsoc, stage1: sp.minStage1Dsoc, gap: sp.minStageGap };
-  const hi = Math.min(hiStudy, sp.socEnd - 0.02);
-  const span = Math.max(0.03, hi - sp.socStart);
-  return {
-    hi,
-    stage: Math.min(sp.minStageDsoc, span / 2),
-    stage1: Math.min(sp.minStage1Dsoc, span / 3),
-    gap: Math.min(sp.minStageGap, span / 3),
-  };
+/* Study bounds: step changes anywhere in 32-90% charge, each step at least 0.25 A.
+ * With sp.socEnd set (the default on the page), a schedule keeps its shape
+ * inside this charge: two-step switches between 25% and 75% of the way through
+ * the charge, three-step at 20-50% and then 20 points of the charge later
+ * (up to 85%), and every step lowers the current by at least 20%. */
+const SHAPED_DROP = 0.2;
+
+function span(sp) {
+  const end = Math.min(sp.socSwitchMax, sp.socEnd);
+  return { start: sp.socStart, len: Math.max(0.03, end - sp.socStart) };
 }
 
 function twoSoc(sp) {
-  const w = stageWindow(sp);
-  const lo = Math.min(sp.socStart + w.stage, w.hi - 1e-3);
-  return [lo, Math.max(lo + 1e-3, w.hi)];
+  if (sp.socEnd == null) {
+    const hi = sp.socSwitchMax;
+    const lo = Math.min(sp.socStart + sp.minStageDsoc, hi - 1e-3);
+    return [lo, Math.max(lo + 1e-3, hi)];
+  }
+  const { start, len } = span(sp);
+  return [start + 0.25 * len, start + 0.75 * len];
 }
 
 function threeSoc(sp) {
-  const w = stageWindow(sp);
-  const soc1Lo = Math.min(sp.socStart + w.stage1, w.hi - w.gap - 1e-3);
-  const soc1Hi = Math.max(soc1Lo + 1e-3, Math.min(0.55, w.hi - w.gap));
-  const soc2Lo = soc1Lo + w.gap;
-  const soc2Hi = Math.max(soc2Lo + 1e-3, w.hi);
-  return [[soc1Lo, soc1Hi], [soc2Lo, soc2Hi], w.gap];
+  if (sp.socEnd == null) {
+    const hi = sp.socSwitchMax;
+    const soc1Lo = Math.min(sp.socStart + sp.minStage1Dsoc, hi - sp.minStageGap - 1e-3);
+    const soc1Hi = Math.max(soc1Lo + 1e-3, Math.min(0.55, hi - sp.minStageGap));
+    const soc2Lo = soc1Lo + sp.minStageGap;
+    return [[soc1Lo, soc1Hi], [soc2Lo, Math.max(soc2Lo + 1e-3, hi)], sp.minStageGap];
+  }
+  const { start, len } = span(sp);
+  return [[start + 0.2 * len, start + 0.5 * len], [start + 0.45 * len, start + 0.85 * len], 0.25 * len];
+}
+
+/** Smallest allowed drop from a step at `amps` to the next one. */
+function drop(sp, amps) {
+  return sp.socEnd == null ? sp.minStepDi : Math.max(sp.minStepDi, SHAPED_DROP * amps);
 }
 
 function uniqueSeeds(rows, clip) {
@@ -73,6 +81,7 @@ export const FAMILIES = {
       for (const vCv of [sp.vCvMin, 0.5 * (sp.vCvMin + sp.vCvMax), sp.vCvMax]) {
         rows.push({ i_cc: ref.i_cc, v_cv: vCv, i_cutoff: ref.i_cutoff });
       }
+      if (sp.iNeed) for (const k of [1.0, 1.08, 1.2]) rows.push({ i_cc: k * sp.iNeed, v_cv: sp.vCvMax, i_cutoff: ref.i_cutoff });
       return uniqueSeeds(rows, (row) => this.clip(row, sp));
     },
     sample(rng, sp = SPACE) {
@@ -140,8 +149,8 @@ export const FAMILIES = {
         i2 = i1;
         socSw = clamp(values.soc_switch ?? socLo, socLo, socHi);
       } else {
-        i1 = clamp(i1Raw, sp.iMin + sp.minStepDi, sp.iMax);
-        i2 = clamp(i2Raw, sp.iMin, Math.max(sp.iMin, i1 - sp.minStepDi));
+        i1 = clamp(i1Raw, sp.iMin / (1 - (sp.socEnd == null ? 0 : SHAPED_DROP)) + (sp.socEnd == null ? sp.minStepDi : 0), sp.iMax);
+        i2 = clamp(i2Raw, sp.iMin, Math.max(sp.iMin, i1 - drop(sp, i1)));
         socSw = clamp(values.soc_switch, socLo, socHi);
       }
       return { i1, i2, soc_switch: socSw };
@@ -155,12 +164,16 @@ export const FAMILIES = {
         { i1: Math.min(4, sp.iMax), i2: Math.max(sp.iMin, 2), soc_switch: socLo },
         { i1: sp.iMax, i2: Math.max(sp.iMin, 0.5 * (sp.iMin + sp.iMax)), soc_switch: socHi },
       ];
+      if (sp.iNeed) {
+        const mid2 = 0.5 * (socLo + socHi);
+        rows.push({ i1: 1.15 * sp.iNeed, i2: 0.85 * sp.iNeed, soc_switch: mid2 }, { i1: 1.3 * sp.iNeed, i2: 0.9 * sp.iNeed, soc_switch: socLo }, { i1: 1.1 * sp.iNeed, i2: 0.8 * sp.iNeed, soc_switch: socHi });
+      }
       return uniqueSeeds(rows, (row) => this.clip(row, sp));
     },
     sample(rng, sp = SPACE) {
       const [socLo, socHi] = twoSoc(sp);
       const i1 = sp.iMin + sp.minStepDi + rng() * (sp.iMax - sp.iMin - sp.minStepDi);
-      const i2 = sp.iMin + rng() * Math.max(0, i1 - sp.minStepDi - sp.iMin);
+      const i2 = sp.iMin + rng() * Math.max(0, i1 - drop(sp, i1) - sp.iMin);
       return this.clip({ i1, i2, soc_switch: socLo + rng() * (socHi - socLo) }, sp);
     },
     init(params, sp = SPACE) {
@@ -206,9 +219,10 @@ export const FAMILIES = {
       if (flat) {
         i1 = i2 = i3 = clamp(values.i1, sp.iMin, sp.iMax);
       } else {
-        i1 = clamp(values.i1, sp.iMin + 2 * sp.minStepDi, sp.iMax);
-        i2 = clamp(values.i2, sp.iMin + sp.minStepDi, Math.max(sp.iMin + sp.minStepDi, i1 - sp.minStepDi));
-        i3 = clamp(values.i3, sp.iMin, Math.max(sp.iMin, i2 - sp.minStepDi));
+        const floor2 = sp.socEnd == null ? sp.iMin + sp.minStepDi : sp.iMin / (1 - SHAPED_DROP);
+        i1 = clamp(values.i1, sp.socEnd == null ? sp.iMin + 2 * sp.minStepDi : floor2 / (1 - SHAPED_DROP), sp.iMax);
+        i2 = clamp(values.i2, floor2, Math.max(floor2, i1 - drop(sp, i1)));
+        i3 = clamp(values.i3, sp.iMin, Math.max(sp.iMin, i2 - drop(sp, i2)));
       }
       const soc1 = clamp(values.soc1, s1lo, s1hi);
       const soc2 = clamp(values.soc2, Math.max(s2lo, soc1 + gap), s2hi);
@@ -222,6 +236,10 @@ export const FAMILIES = {
         { i1: Math.min(4, sp.iMax), i2: Math.min(2.5, sp.iMax), i3: Math.max(sp.iMin, 1.25), soc1: s1lo, soc2: s1lo + gap },
         { i1: sp.iMax, i2: Math.max(sp.iMin + sp.minStepDi, 0.6 * sp.iMax), i3: sp.iMin, soc1: mid1, soc2: Math.min(s2hi, mid1 + 0.2) },
       ];
+      if (sp.iNeed) {
+        rows.push({ i1: 1.25 * sp.iNeed, i2: 1.0 * sp.iNeed, i3: 0.8 * sp.iNeed, soc1: s1lo, soc2: s1lo + gap },
+          { i1: 1.35 * sp.iNeed, i2: 1.05 * sp.iNeed, i3: 0.8 * sp.iNeed, soc1: mid1, soc2: Math.min(s2hi, mid1 + gap) });
+      }
       return uniqueSeeds(rows, (row) => this.clip(row, sp));
     },
     sample(rng, sp = SPACE) {
@@ -288,6 +306,7 @@ export const FAMILIES = {
         { ...base, i_charge: sp.iMax },
         { ...base, i_charge: 0.5 * (sp.iMin + sp.iMax) },
       ];
+      if (sp.iNeed) rows.push({ i_charge: 1.6 * sp.iNeed, pulse_on_min: Math.max(1, sp.pulseOnMax / 2), rest_fraction: 0.5, i_floor: 1.3 * sp.iNeed });
       return uniqueSeeds(rows, (row) => this.clip(row, sp));
     },
     sample(rng, sp = SPACE) {

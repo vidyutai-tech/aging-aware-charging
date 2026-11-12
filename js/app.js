@@ -68,7 +68,9 @@ function sessionFor(req) {
     // Keep step changes inside this charge, and allow at least a few pulses.
     space: req.inWindow
       ? { ...SPACE, // Energy goes in at up to 4.2 V, so the charge ends below start + energy fraction.
-        socEnd: SOC_START + (req.energyFraction * twin.vNom) / V_MAX, pulseOnMax: Math.min(SPACE.pulseOnMax, Math.max(2, req.minutes / 3)) }
+        socEnd: SOC_START + (req.energyFraction * twin.vNom) / V_MAX, pulseOnMax: Math.min(SPACE.pulseOnMax, Math.max(2, req.minutes / 3)),
+        // Average current that delivers this charge in exactly the time available (time-aware starting points).
+        iNeed: ((req.energyFraction * twin.vNom) / V_MAX) * Q_AH / (req.minutes / 60) }
       : SPACE,
     cvMode: req.cvMode,
     objective: req.objective,
@@ -134,7 +136,7 @@ function cellCard(cls, title) {
 }
 
 function render(req, view) {
-  const { ref, best, top, baselines, tested } = view;
+  const { ref, best, top, baselines, tested, familyBest } = view;
   const usage = req.usage;
   const bL = best.metrics.life;
   const rL = ref.metrics.life;
@@ -228,6 +230,10 @@ function render(req, view) {
 
     <h3 class="sub-title">Best of each schedule type</h3>
     <p class="sub-lede">The best schedule found for each type you ticked, then the next best overall. Row 1 is the recommendation, chosen by ${req.objective === "life" ? "pack life" : "the study score"}; both measures are shown for every row.</p>
+    <div class="charts">
+      <article class="panel"><h4>Charge current</h4>${famLegend(familyBest)}<div class="plot"><canvas id="c-fam-i"></canvas></div></article>
+      <article class="panel"><h4>State of charge</h4>${famLegend(familyBest)}<div class="plot"><canvas id="c-fam-s"></canvas></div></article>
+    </div>
     <div class="table-wrap"><table>
       <thead><tr><th></th><th>Schedule</th><th>Search</th><th class="n">Time (min)</th><th class="n">Charges to ${usage.eolPct}%</th><th class="n">Life vs ${refName}</th><th class="n">Study score vs ${refName}</th></tr></thead>
       <tbody>
@@ -273,7 +279,18 @@ function render(req, view) {
     formatX: (x) => `${Math.round(x).toLocaleString("en-IN")} (${fmt((x * usage.hoursBetween) / 8760, 1)} y)`,
   });
 
+  const famSeries = familyBest.map((row) => seriesFrom(row.trace, row.family, FAMILY_COLOR[row.familyId], row.familyId === "pulsed" ? [5, 3] : undefined));
+  const minutesAxis = { xLabel: "Time (min)", formatX: fx };
+  draw("c-fam-i", { ...minutesAxis, yLabel: "Current (A)", series: famSeries.map((f) => f.amps), yMin: 0, formatY: (y) => `${y.toFixed(2)} A` });
+  draw("c-fam-s", { ...minutesAxis, yLabel: "State of charge (%)", series: famSeries.map((f) => f.soc), yMin: 0, yMax: 100, formatY: (y) => `${y.toFixed(1)}%` });
+
   setupPlayer(best.trace, ref.trace);
+}
+
+const FAMILY_COLOR = { cccv: "#3456d1", two_step: "#1f8a55", three_step: "#8a4fd1", pulsed: "#b7791f" };
+
+function famLegend(rows) {
+  return `<div class="legend">${rows.map((r) => `<span><i class="sw" style="border-color:${FAMILY_COLOR[r.familyId]}"></i>${r.family}</span>`).join("")}</div>`;
 }
 
 const pct = (x) => (Number.isFinite(x) ? `${x >= 0 ? "+" : "−"}${fmt(Math.abs(x) * 100, 1)}%` : "–");
@@ -331,7 +348,7 @@ function setupPlayer(bestTrace, refTrace) {
       q("energy").textContent = `${energyCum[j][i].toFixed(2)} Wh`;
       q("phase").textContent = k >= n ? `Finished at ${(n / 60).toFixed(1)} min` : phaseAt(tr, i);
     });
-    for (const c of Object.keys(charts)) if (c !== "c-life") charts[c].cursor(k / 60);
+    for (const c of ["c-i", "c-v", "c-t", "c-s"]) if (charts[c]) charts[c].cursor(k / 60);
   }
 
   player = { raf: 0, playing: false };
@@ -397,11 +414,17 @@ async function run(evt) {
   const bestTrace = rollout(FAMILIES[winner.familyId], winner.params, session, twin);
   const best = { ...winner, trace: bestTrace, metrics: bestTrace.metrics, end: bestTrace.end };
   result.top[0] = { ...result.top[0], metrics: best.metrics, end: best.end };
+  const familyBest = [];
+  for (const row of result.top) {
+    if (familyBest.some((f) => f.familyId === row.familyId)) continue;
+    const tr = row === result.top[0] ? bestTrace : rollout(FAMILIES[row.familyId], row.params, session, twin);
+    familyBest.push({ ...row, trace: tr, metrics: tr.metrics });
+  }
   statusEl.textContent = `Solved in ${((performance.now() - t0) / 1000).toFixed(1)} s`;
   progress.hidden = true;
   go.disabled = false;
   for (const key of Object.keys(charts)) delete charts[key];
-  render(req, { ref, best, top: result.top, baselines, tested: result.tested });
+  render(req, { ref, best, top: result.top, baselines, tested: result.tested, familyBest });
 }
 
 function fail(err) {

@@ -49,9 +49,10 @@ export function rollout(family, params, session, twin) {
       const ceiling = family.ceiling(params, session.vMax, { phase: "cv" });
       const sched = Math.abs(target);
       amps = sched;
-      if (cv.active && sched > 0) {
-        const room = ceiling - twin.ocv(state.soc);
-        amps = Math.min(sched, Math.max(0, room / cv.r));
+      const holdAmps = cv.active ? Math.max(0, (ceiling - twin.ocv(state.soc)) / cv.r) : Infinity;
+      if (cv.active && sched > holdAmps) {
+        // The schedule asks for more than the cell takes at 4.2 V: hold the voltage.
+        amps = holdAmps;
         if (amps < minCharge) {
           end = "Voltage hold tapered out";
           break;
@@ -60,17 +61,20 @@ export function rollout(family, params, session, twin) {
         vs = new Array(DECISION_S).fill(ceiling);
         ts = Array.from(pred.t);
       } else {
+        // Below the limit (or resting): the twin gives voltage and temperature.
         const pred = twin.stepResponse(v0, t0, sched, Math.abs(prevI));
         vs = Array.from(pred.v);
         ts = Array.from(pred.t);
         if (sched > 0) {
           const k = vs.findIndex((v) => v >= ceiling);
           if (k >= 0) {
-            // Switch to the voltage hold at the crossing sample.
-            const socK = Math.min(1, state.soc + (sched * (k + 1)) / session.qAs);
-            cv.active = true;
-            cv.startS = current.length + k;
-            cv.r = Math.max(0.01, (ceiling - twin.ocv(socK)) / sched);
+            // Reached the limit at sample k: switch to the voltage hold.
+            if (!cv.active) {
+              const socK = Math.min(1, state.soc + (sched * (k + 1)) / session.qAs);
+              cv.active = true;
+              cv.startS = current.length + k;
+              cv.r = Math.max(0.01, (ceiling - twin.ocv(socK)) / sched);
+            }
             for (let j = k; j < DECISION_S; j++) {
               vs[j] = ceiling;
               ts[j] = ts[k];
