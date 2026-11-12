@@ -1,6 +1,8 @@
 /** Random search and a Gaussian-process search on the study score. */
 
 import { FAMILIES } from "./profiles.js";
+
+const FAMILY_ORDER = ["cccv", "two_step", "three_step", "pulsed"];
 import { rollout } from "./simulate.js";
 
 function mulberry32(seed) {
@@ -166,7 +168,7 @@ function propose(xs, ys, family, space, rng, acq, xi) {
 function consider(row, top) {
   top.push(row);
   top.sort((a, b) => a.loss - b.loss);
-  if (top.length > 6) top.length = 6;
+  if (top.length > 400) top.length = 400;
 }
 
 async function searchFamily(family, session, twin, opts, method, onTick) {
@@ -236,7 +238,8 @@ export async function planCharge(session, twin, options, onProgress) {
   const budget = families.length * methods.length * options.nCalls;
   for (let m = 0; m < methods.length; m++) {
     for (let f = 0; f < families.length; f++) {
-      const seed = (options.seed + m * 1009 + f * 17) >>> 0;
+      // Seed by schedule type, so a type gives the same answer whatever else is ticked.
+      const seed = (options.seed + m * 1009 + FAMILY_ORDER.indexOf(families[f].id) * 17) >>> 0;
       await searchFamily(families[f], session, twin, { ...options, seed }, methods[m], async (row) => {
         tested += 1;
         consider(row, row.feasible ? feasible : fallback);
@@ -248,5 +251,10 @@ export async function planCharge(session, twin, options, onProgress) {
     }
   }
   const pool = feasible.length ? feasible : fallback;
-  return { top: pool.slice(0, 6), tested };
+  // Best of each schedule type first, then the next best overall, up to six.
+  const bestOf = new Map();
+  for (const row of pool) if (!bestOf.has(row.familyId)) bestOf.set(row.familyId, row);
+  const top = [...bestOf.values()].sort((a, b) => a.loss - b.loss);
+  for (const row of pool) if (top.length < 6 && !top.includes(row)) top.push(row);
+  return { top, tested };
 }

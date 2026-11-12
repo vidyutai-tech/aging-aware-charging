@@ -48,6 +48,7 @@ function readRequest() {
     seed: Math.round(num("seed")),
     objective: $("objective").value,
     cvMode: $("cvmode").value,
+    inWindow: $("inwin").checked,
     refC: Number($("ref").value),
     usage: { hoursBetween: num("hours"), parkC: num("park"), eolPct: num("eol") },
     weights: { wSoc: num("w-soc"), wLoss: num("w-loss"), wTime: num("w-time"), zTime: num("z-time") },
@@ -64,7 +65,11 @@ function sessionFor(req) {
     vNom: twin.vNom,
     qAs: twin.qAs,
     weights: req.weights,
-    space: SPACE,
+    // Keep step changes inside this charge, and allow at least a few pulses.
+    space: req.inWindow
+      ? { ...SPACE, // Energy goes in at up to 4.2 V, so the charge ends below start + energy fraction.
+        socEnd: SOC_START + (req.energyFraction * twin.vNom) / V_MAX, pulseOnMax: Math.min(SPACE.pulseOnMax, Math.max(2, req.minutes / 3)) }
+      : SPACE,
     cvMode: req.cvMode,
     objective: req.objective,
     usage: req.usage,
@@ -176,7 +181,7 @@ function render(req, view) {
       <div class="vcard ref"><div class="k">${refName}, charges to ${usage.eolPct}%</div><div class="v">${fmt(rL.charges, 0)}</div><div class="s">${fmt(ref.metrics.durationMin, 1)} min per charge, ${fmt(rL.years, 1)} years</div></div>
     </div>
 
-    <p class="story">For ${fmt(req.km, 0)} km the pack needs ${fmt(req.demand.packKwh, 1)} kWh, so each cell gains ${fmt(req.energyFraction * 100, 1)}% charge. The recommended charge is <strong>${best.family}</strong>: ${describeParams(best.familyId, best.params)}. ${timeLine}. ${cmpLine}</p>
+    <p class="story">For ${fmt(req.km, 0)} km the pack needs ${fmt(req.demand.packKwh, 1)} kWh, so each cell gains ${fmt(req.energyFraction * 100, 1)}% charge. The recommended charge is <strong>${best.family}</strong>: ${describeParams(best.familyId, best.params, best.metrics.socEnd, best.metrics.durationMin)}. ${timeLine}. ${cmpLine}</p>
 
     <h3 class="sub-title">The charge, minute by minute</h3>
     <p class="sub-lede">Both charges on the same cell model. Drag the slider or press Play.</p>
@@ -221,13 +226,15 @@ function render(req, view) {
     </table></div>
     <p class="fine">${END_TEXT[best.end] || best.end}. Study per-session wear index for the recommended charge (paper closed form): calendar ${sci(best.metrics.qCalendar)}, cycle ${sci(best.metrics.qCyclic)}. Study score versus ${refName}: ${fmt(best.metrics.reward - ref.metrics.reward, 1)}.</p>
 
-    <h3 class="sub-title">Other schedules that did well</h3>
+    <h3 class="sub-title">Best of each schedule type</h3>
+    <p class="sub-lede">The best schedule found for each type you ticked, then the next best overall. Row 1 is the recommendation, chosen by ${req.objective === "life" ? "pack life" : "the study score"}; both measures are shown for every row.</p>
     <div class="table-wrap"><table>
-      <thead><tr><th></th><th>Schedule</th><th>Search</th><th class="n">Time (min)</th><th class="n">Charges to ${usage.eolPct}%</th><th class="n">${req.objective === "life" ? `Life vs ${refName}` : `Score vs ${refName}`}</th></tr></thead>
+      <thead><tr><th></th><th>Schedule</th><th>Search</th><th class="n">Time (min)</th><th class="n">Charges to ${usage.eolPct}%</th><th class="n">Life vs ${refName}</th><th class="n">Study score vs ${refName}</th></tr></thead>
       <tbody>
-        ${top.map((row, i) => `<tr class="${i === 0 ? "pick" : ""}"><td>${i + 1}</td><td>${row.family}<br><span class="fine">${describeParams(row.familyId, row.params)}</span></td><td>${methodName(row.method)}</td><td class="n">${fmt(row.metrics.durationMin)}</td><td class="n">${fmt(row.metrics.life.charges, 0)}</td><td class="n">${req.objective === "life" ? pct(row.metrics.life.charges / rL.charges - 1) : fmt(row.metrics.reward - ref.metrics.reward, 1)}</td></tr>`).join("")}
+        ${top.map((row, i) => `<tr class="${i === 0 ? "pick" : ""}"><td>${i + 1}</td><td>${row.family}<br><span class="fine">${describeParams(row.familyId, row.params, row.metrics.socEnd, row.metrics.durationMin)}</span></td><td>${methodName(row.method)}</td><td class="n">${fmt(row.metrics.durationMin)}</td><td class="n">${fmt(row.metrics.life.charges, 0)}</td><td class="n">${pct(row.metrics.life.charges / rL.charges - 1)}</td><td class="n">${fmt(row.metrics.reward - ref.metrics.reward, 1)}</td></tr>`).join("")}
       </tbody>
     </table></div>
+    <p class="fine">Study score: 1000 × (2.5 × charge added − 7500 × session wear − 1.1 × hours^0.55), the paper's reward. Higher is better. "Not reached" marks a step the charge ended before.</p>
 
     <h3 class="sub-title">How the trip became a charge</h3>
     <div class="pipeline">

@@ -2,19 +2,35 @@
 
 import { SPACE, clamp } from "./physics.js";
 
+/* Step changes may fall anywhere in the study bounds (32-90% charge). When
+ * sp.socEnd is set, they are kept inside this charge instead, so a two-step or
+ * three-step schedule really changes current before the charge ends. */
+function stageWindow(sp) {
+  const hiStudy = sp.socSwitchMax;
+  if (sp.socEnd == null) return { hi: hiStudy, stage: sp.minStageDsoc, stage1: sp.minStage1Dsoc, gap: sp.minStageGap };
+  const hi = Math.min(hiStudy, sp.socEnd - 0.02);
+  const span = Math.max(0.03, hi - sp.socStart);
+  return {
+    hi,
+    stage: Math.min(sp.minStageDsoc, span / 2),
+    stage1: Math.min(sp.minStage1Dsoc, span / 3),
+    gap: Math.min(sp.minStageGap, span / 3),
+  };
+}
+
 function twoSoc(sp) {
-  const hi = sp.socSwitchMax;
-  const lo = Math.min(sp.socStart + sp.minStageDsoc, hi - 1e-3);
-  return [lo, Math.max(lo + 1e-3, hi)];
+  const w = stageWindow(sp);
+  const lo = Math.min(sp.socStart + w.stage, w.hi - 1e-3);
+  return [lo, Math.max(lo + 1e-3, w.hi)];
 }
 
 function threeSoc(sp) {
-  const hi = sp.socSwitchMax;
-  const soc1Lo = Math.min(sp.socStart + sp.minStage1Dsoc, hi - sp.minStageGap - 1e-3);
-  const soc1Hi = Math.max(soc1Lo + 1e-3, Math.min(0.55, hi - sp.minStageGap));
-  const soc2Lo = soc1Lo + sp.minStageGap;
-  const soc2Hi = Math.max(soc2Lo + 1e-3, hi);
-  return [[soc1Lo, soc1Hi], [soc2Lo, soc2Hi]];
+  const w = stageWindow(sp);
+  const soc1Lo = Math.min(sp.socStart + w.stage1, w.hi - w.gap - 1e-3);
+  const soc1Hi = Math.max(soc1Lo + 1e-3, Math.min(0.55, w.hi - w.gap));
+  const soc2Lo = soc1Lo + w.gap;
+  const soc2Hi = Math.max(soc2Lo + 1e-3, w.hi);
+  return [[soc1Lo, soc1Hi], [soc2Lo, soc2Hi], w.gap];
 }
 
 function uniqueSeeds(rows, clip) {
@@ -182,7 +198,7 @@ export const FAMILIES = {
       };
     },
     clip(values, sp = SPACE) {
-      const [[s1lo, s1hi], [s2lo, s2hi]] = threeSoc(sp);
+      const [[s1lo, s1hi], [s2lo, s2hi], gap] = threeSoc(sp);
       const flat = Math.abs(values.i1 - values.i2) < 1e-9 && Math.abs(values.i2 - values.i3) < 1e-9;
       let i1;
       let i2;
@@ -195,27 +211,27 @@ export const FAMILIES = {
         i3 = clamp(values.i3, sp.iMin, Math.max(sp.iMin, i2 - sp.minStepDi));
       }
       const soc1 = clamp(values.soc1, s1lo, s1hi);
-      const soc2 = clamp(values.soc2, Math.max(s2lo, soc1 + sp.minStageGap), s2hi);
+      const soc2 = clamp(values.soc2, Math.max(s2lo, soc1 + gap), s2hi);
       return { i1, i2, i3, soc1, soc2 };
     },
     seeds(sp = SPACE) {
-      const [[s1lo, s1hi], [, s2hi]] = threeSoc(sp);
+      const [[s1lo, s1hi], [, s2hi], gap] = threeSoc(sp);
       const mid1 = 0.5 * (s1lo + s1hi);
       const rows = [
-        { i1: Math.min(3, sp.iMax), i2: Math.min(2, sp.iMax), i3: Math.max(sp.iMin, 1), soc1: mid1, soc2: mid1 + sp.minStageGap },
-        { i1: Math.min(4, sp.iMax), i2: Math.min(2.5, sp.iMax), i3: Math.max(sp.iMin, 1.25), soc1: s1lo, soc2: s1lo + sp.minStageGap },
+        { i1: Math.min(3, sp.iMax), i2: Math.min(2, sp.iMax), i3: Math.max(sp.iMin, 1), soc1: mid1, soc2: mid1 + gap },
+        { i1: Math.min(4, sp.iMax), i2: Math.min(2.5, sp.iMax), i3: Math.max(sp.iMin, 1.25), soc1: s1lo, soc2: s1lo + gap },
         { i1: sp.iMax, i2: Math.max(sp.iMin + sp.minStepDi, 0.6 * sp.iMax), i3: sp.iMin, soc1: mid1, soc2: Math.min(s2hi, mid1 + 0.2) },
       ];
       return uniqueSeeds(rows, (row) => this.clip(row, sp));
     },
     sample(rng, sp = SPACE) {
-      const [[s1lo, s1hi], [s2lo, s2hi]] = threeSoc(sp);
+      const [[s1lo, s1hi], [s2lo, s2hi], gap] = threeSoc(sp);
       const i1 = sp.iMin + 2 * sp.minStepDi + rng() * (sp.iMax - (sp.iMin + 2 * sp.minStepDi));
       const i2hi = Math.max(sp.iMin + sp.minStepDi, i1 - sp.minStepDi);
       const i2 = sp.iMin + sp.minStepDi + rng() * (i2hi - (sp.iMin + sp.minStepDi));
       const i3 = sp.iMin + rng() * Math.max(0, i2 - sp.minStepDi - sp.iMin);
       const soc1 = s1lo + rng() * (s1hi - s1lo);
-      const floor = Math.max(s2lo, soc1 + sp.minStageGap);
+      const floor = Math.max(s2lo, soc1 + gap);
       const soc2 = floor + rng() * Math.max(1e-6, s2hi - floor);
       return this.clip({ i1, i2, i3, soc1, soc2 }, sp);
     },
@@ -337,17 +353,20 @@ export function baselineParams(cRate) {
   });
 }
 
-export function describeParams(familyId, params) {
+export function describeParams(familyId, params, socEnd = 1, durationMin = Infinity) {
+  const pct = (x) => Math.round(x * 100);
+  const later = (soc, text) => (soc < socEnd - 1e-6 ? text : `${text} (not reached)`);
   if (familyId === "cccv") {
     return `Hold ${params.i_cc.toFixed(2)} A until ${params.v_cv.toFixed(2)} V, then taper to ${params.i_cutoff.toFixed(2)} A`;
   }
   if (familyId === "two_step") {
-    return `${params.i1.toFixed(2)} A until ${Math.round(params.soc_switch * 100)}% charge, then ${params.i2.toFixed(2)} A`;
+    return `${params.i1.toFixed(2)} A, ${later(params.soc_switch, `then ${params.i2.toFixed(2)} A from ${pct(params.soc_switch)}%`)}`;
   }
   if (familyId === "three_step") {
-    return `${params.i1.toFixed(2)} A, then ${params.i2.toFixed(2)} A from ${Math.round(params.soc1 * 100)}%, then ${params.i3.toFixed(2)} A from ${Math.round(params.soc2 * 100)}%`;
+    return `${params.i1.toFixed(2)} A, ${later(params.soc1, `then ${params.i2.toFixed(2)} A from ${pct(params.soc1)}%`)}, ${later(params.soc2, `then ${params.i3.toFixed(2)} A from ${pct(params.soc2)}%`)}`;
   }
-  return `${params.i_charge.toFixed(2)} A for ${params.pulse_on_min.toFixed(1)} min, rest ${params.pulse_rest_min.toFixed(1)} min, floor ${params.i_floor.toFixed(2)} A`;
+  const rest = `rest ${params.pulse_rest_min.toFixed(1)} min`;
+  return `${params.i_charge.toFixed(2)} A for ${params.pulse_on_min.toFixed(1)} min, ${durationMin <= params.pulse_on_min + 1e-6 ? `${rest} (not reached)` : rest}, floor ${params.i_floor.toFixed(2)} A`;
 }
 
 export const END_TEXT = {
