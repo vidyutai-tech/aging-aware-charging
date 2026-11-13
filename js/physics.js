@@ -16,6 +16,7 @@
 export const WH_PER_KM = 38000 / 160.9344;
 export const N_CELLS = 7104;
 export const Q_AH = 2.2;
+export const CELL_WH = 7.81; // default energy of one cell (Wh), editable on the page
 export const SOC_START = 0.2;
 export const V_MAX = 4.2;
 export const I_MAX = 4.616;
@@ -62,18 +63,21 @@ export function cellWattHours(vNom) {
 }
 
 /** Pack energy, per-cell energy, and the charge fraction the study calls energy_fraction. */
-export function tripDemand(km, vNom, whPerKm = WH_PER_KM, nCells = N_CELLS) {
+export function tripDemand(km, vNom, whPerKm = WH_PER_KM, nCells = N_CELLS, cellCapacityWh = null, socStart = SOC_START) {
   const packWh = whPerKm * km;
   const cellWh = packWh / nCells;
-  const fullWh = cellWattHours(vNom);
+  const fullWh = cellCapacityWh > 0 ? cellCapacityWh : CELL_WH;
   const raw = fullWh > 0 ? cellWh / fullWh : 0;
-  const room = 1 - SOC_START;
+  const room = 1 - socStart;
   const fraction = clamp(raw, 0, room);
   const maxKm = (room * fullWh * nCells) / whPerKm;
   return {
     km,
+    socStart,
     packKwh: packWh / 1000,
     packCapacityKwh: (fullWh * nCells) / 1000,
+    nCells,
+    kwhPerKm: whPerKm / 1000,
     cellWh,
     fullWh,
     rawFraction: raw,
@@ -98,8 +102,7 @@ export function energyDeliveredJ(voltage, current) {
   return Math.max(0, trapzUnit(power));
 }
 
-function tentWeights(cRate) {
-  const bins = DEG.bins;
+function tentWeights(cRate, bins = DEG.bins) {
   const n = bins.length;
   const w = new Array(n).fill(0);
   const c = Math.abs(cRate);
@@ -142,18 +145,19 @@ export function scoreSession(current, voltage, temperature, session, weights) {
     }
   }
   const cRate = cN ? cSum / cN : 0;
+  const deg = session.deg ?? DEG; // wear coefficients from the Advanced settings, else the study fit
   const meanSoc = n ? soc.reduce((s, x) => s + x, 0) / n : 0;
   const meanT = n ? temperature.reduce((s, x) => s + x, 0) / n : 25;
   const tk = Math.max(meanT + 273.15, 200);
   const ms = clamp(meanSoc, 0, 1);
-  const kCal = DEG.A_cal * Math.exp(DEG.B_cal * ms) * Math.exp(-(DEG.Ea_cal + DEG.C_cal * ms) / (DEG.R * tk));
+  const kCal = deg.A_cal * Math.exp(deg.B_cal * ms) * Math.exp(-(deg.Ea_cal + deg.C_cal * ms) / (deg.R * tk));
   const durH = n / 3600;
-  const qCal = kCal * (durH > 0 ? durH ** DEG.z_cal : 0);
-  const w = tentWeights(cRate);
+  const qCal = kCal * (durH > 0 ? durH ** deg.z_cal : 0);
+  const w = tentWeights(cRate, deg.bins);
   let qCyc = 0;
-  for (let b = 0; b < DEG.bins.length; b++) {
-    const kb = DEG.B[b] * Math.exp(-DEG.Ea[b] / (DEG.R * tk));
-    qCyc += kb * (w[b] * ah) ** DEG.z[b];
+  for (let b = 0; b < deg.bins.length; b++) {
+    const kb = deg.B[b] * Math.exp(-deg.Ea[b] / (deg.R * tk));
+    qCyc += kb * (w[b] * ah) ** deg.z[b];
   }
   const deltaSoc = n ? soc[n - 1] - soc[0] : 0;
   const timeRaw = durH > 0 ? durH ** weights.zTime : 0;
@@ -171,10 +175,10 @@ export function scoreSession(current, voltage, temperature, session, weights) {
     if (temperature[k] > peakT) peakT = temperature[k];
   }
   const vOver = Math.max(0, peakV - session.vMax);
-  const penalty = 1000 * (300 * shortfall + 100 * vOver);
+  const penalty = 1000 * ((weights.penShort ?? 300) * shortfall + (weights.penVolt ?? 100) * vOver);
   const feasible = eDel >= eReq - 1e-3 && vOver <= 1e-3;
   const durationMin = n / 60;
-  const loss = -reward + 1e-3 * durationMin + penalty;
+  const loss = -reward + (weights.durW ?? 1e-3) * durationMin + penalty;
   return {
     reward, loss, feasible, socTerm, qTerm, timeTerm,
     eDel, eReq, eNorm, deltaSoc,
@@ -190,14 +194,14 @@ export function scoreSession(current, voltage, temperature, session, weights) {
   };
 }
 
-/** 0.5C charge is anchored at 80% capacity after 600 equivalent charges. */
-export function lifeToEighty(qSession, qHalf) {
+/** 0.5C charge is anchored at 80% capacity after `anchor` equivalent charges (600 in the study). */
+export function lifeToEighty(qSession, qHalf, anchor = 600) {
   if (!(qSession > 0) || !(qHalf > 0)) return { cycles: null, extra: null, replacementRatio: null };
-  const cycles = 600 * qHalf / qSession;
+  const cycles = anchor * qHalf / qSession;
   return {
     cycles,
-    extra: cycles - 600,
-    replacementRatio: 600 / cycles,
+    extra: cycles - anchor,
+    replacementRatio: anchor / cycles,
   };
 }
 

@@ -11,8 +11,8 @@ export function rollout(family, params, session, twin) {
   const current = [];
   const voltage = [];
   const temperature = [];
-  let v0 = twin.v0;
-  let t0 = twin.t0;
+  let v0 = session.v0 ?? twin.v0;
+  let t0 = session.t0 ?? twin.t0;
   let prevI = 0;
   let end = "time budget";
   const nDec = Math.floor(session.maxMin * 60 / 30);
