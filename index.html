@@ -18,7 +18,7 @@
   <main class="page">
     <form class="sheet" id="planner" novalidate>
       <h2 class="sheet-title">Plan the charge</h2>
-      <p class="sheet-lede">Enter the trip and the time you have at the charger.</p>
+      <p class="sheet-lede">Enter the trip, the vehicle, and the time you have at the charger.</p>
 
       <section class="step">
         <h3><span class="badge">1</span>The trip</h3>
@@ -31,18 +31,56 @@
           <label class="tile">
             <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="26" r="17" fill="none" stroke="currentColor" stroke-width="3"/><path d="M24 15v11l7 5" fill="none" stroke="#f2b632" stroke-width="3" stroke-linecap="round"/><path d="M19 5h10" stroke="currentColor" stroke-width="3"/></svg>
             <span class="tile-body"><span class="tile-name">Time at the charger</span>
-            <span class="num"><input id="minutes" type="number" min="5" max="180" step="1" value="30"><span class="unit">min</span></span></span>
+            <span class="num"><input id="minutes" type="number" min="5" max="360" step="1" value="90"><span class="unit">min</span></span></span>
           </label>
-        </div>
-        <div class="presets" role="group" aria-label="Example trips">
-          <button type="button" data-km="40" data-min="20">City errands, 40 km</button>
-          <button type="button" data-km="100" data-min="30" class="on">Daily commute, 100 km</button>
-          <button type="button" data-km="250" data-min="45">Highway leg, 250 km</button>
         </div>
       </section>
 
       <section class="step">
-        <h3><span class="badge">2</span>Charging schedules to search</h3>
+        <h3><span class="badge">2</span>The vehicle and how it is used</h3>
+        <div class="presets" id="vehicles" role="group" aria-label="Vehicle type">
+          <button type="button" data-vehicle="two">Two-wheeler</button>
+          <button type="button" data-vehicle="three">Three-wheeler</button>
+          <button type="button" data-vehicle="compact" class="on">Compact car</button>
+          <button type="button" data-vehicle="large">Large car</button>
+        </div>
+        <div class="tiles three">
+          <label class="tile">
+            <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><path d="M6 30l5-12h26l5 12v8H6z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="38" r="4" fill="#fff" stroke="currentColor" stroke-width="3"/><circle cx="34" cy="38" r="4" fill="#fff" stroke="currentColor" stroke-width="3"/><path d="M25 20l-4 6h6l-4 6" fill="none" stroke="#f2b632" stroke-width="2.5"/></svg>
+            <span class="tile-body"><span class="tile-name">Efficiency</span>
+            <span class="num"><input id="kwhkm" type="number" min="0.02" max="0.6" step="0.001" value="0.217"><span class="unit">kWh/km</span></span></span>
+          </label>
+          <label class="tile">
+            <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="9" width="38" height="33" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><path d="M5 18h38M14 4v9M34 4v9" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="30" r="4" fill="#f2b632"/></svg>
+            <span class="tile-body"><span class="tile-name">Time between charges</span>
+            <span class="num"><input id="hours" type="number" min="2" max="336" step="1" value="24"><span class="unit">h</span></span></span>
+          </label>
+          <label class="tile">
+            <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><path d="M20 30V9a4 4 0 0 1 8 0v21a8 8 0 1 1-8 0z" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="37" r="4" fill="#d9692f"/><path d="M24 33V18" stroke="#d9692f" stroke-width="3"/></svg>
+            <span class="tile-body"><span class="tile-name">Parked temperature</span>
+            <span class="num"><input id="park" type="number" min="-10" max="50" step="1" value="25"><span class="unit">°C</span></span></span>
+          </label>
+        </div>
+        <details class="pack" open>
+          <summary>Pack details</summary>
+          <div class="tiles">
+            <label class="tile">
+              <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="8" width="9" height="32" rx="2"/><rect x="19.5" y="8" width="9" height="32" rx="2"/><rect x="33" y="8" width="9" height="32" rx="2"/></g><path d="M8 30h5M21.5 30h5M35 30h5" stroke="#2e9e62" stroke-width="6"/></svg>
+              <span class="tile-body"><span class="tile-name">Cells in the pack</span>
+              <span class="num"><input id="cells" type="number" min="100" max="20000" step="1" value="5100"><span class="unit">cells</span></span></span>
+            </label>
+            <label class="tile">
+              <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><rect x="14" y="8" width="20" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><path d="M20 4h8v6h-8z" fill="currentColor"/><path d="M24 16v10M20 22h8" stroke="#f2b632" stroke-width="2.5"/></svg>
+              <span class="tile-body"><span class="tile-name">Battery cost</span>
+              <span class="num"><span class="unit">₹</span><input id="cost" type="number" min="0" max="10000000" step="1000" value="500000"></span></span>
+            </label>
+          </div>
+        </details>
+        <p class="note" id="pack-note"></p>
+      </section>
+
+      <section class="step">
+        <h3><span class="badge">3</span>Charging schedules to search</h3>
         <div class="kinds">
           <label class="kind"><input type="checkbox" name="family" value="cccv" checked>
             <span class="kind-name">CCCV</span><span class="kind-desc">Constant current, then a voltage hold</span>
@@ -58,74 +96,6 @@
             <svg viewBox="0 0 120 40" aria-hidden="true"><path d="M4 8h24v26h16V8h24v26h16V8h32" fill="none" stroke="currentColor" stroke-width="3"/></svg></label>
         </div>
       </section>
-
-      <details class="adv">
-        <summary>Advanced settings</summary>
-        <div class="adv-grid">
-          <fieldset>
-            <legend>What the search aims for</legend>
-            <label for="objective">Choose the charge by</label>
-            <select id="objective">
-              <option value="life" selected>Longest pack life that finishes in time</option>
-              <option value="study">Study score (charge added, wear and time)</option>
-            </select>
-            <label for="cvmode">At the 4.2 V limit</label>
-            <select id="cvmode">
-              <option value="hold" selected>Hold the voltage and let the current taper</option>
-              <option value="study">Study rule: drop 0.25 A at each touch</option>
-            </select>
-            <label for="ref">Compare against</label>
-            <select id="ref">
-              <option value="0.5" selected>CCCV 0.5C</option>
-              <option value="1">CCCV 1C</option>
-              <option value="2">CCCV 2C</option>
-            </select>
-            <label class="inline"><input id="inwin" type="checkbox" checked> Keep step changes and pulses inside this charge</label>
-            <label for="eol">End of life at</label>
-            <span class="num small"><input id="eol" type="number" min="50" max="95" step="1" value="80"><span class="unit">% capacity</span></span>
-          </fieldset>
-          <fieldset>
-            <legend>Search</legend>
-            <label for="method">Method</label>
-            <select id="method">
-              <option value="gp_bo" selected>Gaussian-process search</option>
-              <option value="random_search">Random search</option>
-              <option value="both">Both, keep the better</option>
-            </select>
-            <label for="trials">Trials per schedule type</label>
-            <input id="trials" type="number" min="8" max="80" step="1" value="40">
-            <label for="warm">Warm-start points</label>
-            <input id="warm" type="number" min="3" max="40" step="1" value="15">
-            <label for="acq">Acquisition</label>
-            <select id="acq">
-              <option value="EI" selected>Expected improvement</option>
-              <option value="PI">Probability of improvement</option>
-              <option value="LCB">Lower confidence bound</option>
-            </select>
-            <label for="seed">Seed</label>
-            <input id="seed" type="number" min="0" max="10000" step="1" value="42">
-          </fieldset>
-          <fieldset>
-            <legend>Study score weights</legend>
-            <label for="w-soc">Charge added</label>
-            <input id="w-soc" type="number" min="0" max="20" step="0.1" value="2.5">
-            <label for="w-loss">Wear</label>
-            <input id="w-loss" type="number" min="0" max="20000" step="100" value="7500">
-            <label for="w-time">Time</label>
-            <input id="w-time" type="number" min="0" max="10" step="0.05" value="1.1">
-            <label for="z-time">Time exponent</label>
-            <input id="z-time" type="number" min="0.1" max="1.5" step="0.05" value="0.55">
-            <label for="stop">Stop the charge</label>
-            <select id="stop">
-              <option value="energy" selected>When the trip energy is delivered</option>
-              <option value="soc">When the charge added is reached</option>
-            </select>
-            <label class="inline"><input id="override" type="checkbox"> Set the charge added directly</label>
-            <span class="num small"><input id="fraction" type="number" min="10" max="80" step="1" value="40"><span class="unit">%</span></span>
-          </fieldset>
-        </div>
-        <p class="note">The published run used 80 trials, 15 warm-start points, expected improvement and seed 42. The weights apply only when the search uses the study score.</p>
-      </details>
 
       <div class="actions">
         <button class="go" id="go" type="submit">Plan the charge</button>

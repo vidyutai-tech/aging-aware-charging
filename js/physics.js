@@ -62,14 +62,14 @@ export function cellWattHours(vNom) {
 }
 
 /** Pack energy, per-cell energy, and the charge fraction the study calls energy_fraction. */
-export function tripDemand(km, vNom) {
-  const packWh = WH_PER_KM * km;
-  const cellWh = packWh / N_CELLS;
+export function tripDemand(km, vNom, whPerKm = WH_PER_KM, nCells = N_CELLS) {
+  const packWh = whPerKm * km;
+  const cellWh = packWh / nCells;
   const fullWh = cellWattHours(vNom);
   const raw = fullWh > 0 ? cellWh / fullWh : 0;
   const room = 1 - SOC_START;
   const fraction = clamp(raw, 0, room);
-  const maxKm = (room * fullWh * N_CELLS) / WH_PER_KM;
+  const maxKm = whPerKm > 0 ? (room * fullWh * nCells) / whPerKm : 0;
   return {
     km,
     packKwh: packWh / 1000,
