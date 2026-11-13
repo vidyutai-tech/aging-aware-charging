@@ -171,7 +171,7 @@ function render(req, view) {
   out.innerHTML = `
   <section class="result" aria-labelledby="res-title">
     <h2 class="result-title" id="res-title">The recommended charge</h2>
-    <p class="result-lede">${tested} schedules were tried on the RW9 twin. ${req.objective === "life" ? "The one shown gives the longest pack life among those that deliver the trip energy in time." : "The one shown has the best study score."}</p>
+    <p class="result-lede">${tested} schedules were on the digital twin. ${req.objective === "life" ? "The one shown gives the longest pack life among those that deliver the trip energy in time." : "The one shown has the best study score."}</p>
     ${warn.map((t) => `<div class="banner">${t}</div>`).join("")}
 
     <div class="verdict">
@@ -249,7 +249,7 @@ function render(req, view) {
       <div class="pipe"><b>${fmt(req.energyFraction * 100, 1)}% added</b><span>Each cell holds ${fmt(req.demand.fullWh, 2)} Wh (${Q_AH} Ah at ${fmt(twin.vNom, 2)} V). The charge starts at ${Math.round(SOC_START * 100)}%.</span></div>
       <div class="pipe"><b>${fmt(req.minutes, 0)} min limit</b><span>Current up to ${fmt(SPACE.iMax, 2)} A per cell, voltage up to ${V_MAX.toFixed(1)} V.</span></div>
     </div>
-    <p class="fine">The pack is treated as identical cells. Voltage and temperature come from the RW9 twin; ${req.cvMode === "hold" ? "at 4.2 V the current tapers as a charger's voltage hold would, using the cell's open-circuit voltage curve" : "at 4.2 V the study rule lowers the current 0.25 A at each touch"}. Cycle aging counts charge ampere-hours, as in the study's fit.</p>
+    <p class="fine">The pack is treated as identical cells. Voltage and temperature come from the digital twin; ${req.cvMode === "hold" ? "at 4.2 V the current tapers as a charger's voltage hold would, using the cell's open-circuit voltage curve" : "at 4.2 V the study rule lowers the current 0.25 A at each touch"}. Cycle aging counts charge ampere-hours, as in the study's fit.</p>
   </section>`;
 
   const bestS = seriesFrom(best.trace, "Recommended", "#1f8a55");
