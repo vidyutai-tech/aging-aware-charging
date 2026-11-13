@@ -140,23 +140,6 @@ function render(req, d, baselines, best, top, tested) {
       <div class="pipe"><b>${fmt(d.energyFraction * 100, 1)}% added</b><span>Each cell holds ${fmt(d.fullWh, 2)} Wh (${Q_AH} Ah × ${fmt(twin.vNom, 3)} V). The charge starts at ${Math.round(SOC_START * 100)}%.</span></div>
       <div class="pipe"><b>${fmt(req.minutes, 0)} min limit</b><span>Current up to ${fmt(SPACE.iMax, 2)} A per cell, voltage up to ${V_MAX.toFixed(1)} V.</span></div>
     </div>
-
-    <h3 class="sub-title">Fixed values and their sources</h3>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Value</th><th>Used</th><th>Source</th></tr></thead>
-      <tbody>
-        <tr><td>Cell data</td><td>NASA RW9 (18650, LG Chem, LiCoO<sub>2</sub>)</td><td>Bole, Kulkarni and Daigle, Randomized Battery Usage Data Set, NASA Ames PCoE, 2014</td></tr>
-        <tr><td>Voltage and temperature</td><td>RW9 digital twin</td><td>Trained on the NASA RW9 data (twin_source_RW9.pt)</td></tr>
-        <tr><td>Cell capacity</td><td>${Q_AH} Ah</td><td>Research config, q_nominal_ah (published NASA documentation states 2.1 Ah nominal)</td></tr>
-        <tr><td>Nominal voltage</td><td>${fmt(twin.vNom, 3)} V</td><td>Mean of the NASA RW9 open-circuit voltage curve, 10–90% charge (research twin.OcvCurve)</td></tr>
-        <tr><td>Start of charge, limits</td><td>20%, 4.2 V, ${fmt(SPACE.iMax, 2)} A, 24 °C</td><td>Research config (SessionSpec, I_MAX_A)</td></tr>
-        <tr><td>Aging coefficients</td><td>Q<sub>cal</sub> + Q<sub>cyc</sub></td><td>Research config, DEGRADATION (cyclic fitted on NASA RW)</td></tr>
-        <tr><td>Lifetime reference</td><td>CCCV 0.5C = 80% at 600 charges</td><td>Research config, lifetime.n_equivalent_cycles</td></tr>
-        <tr><td>Energy use</td><td>${fmt(WH_PER_KM, 1)} Wh/km</td><td>EPA rating, Tesla Model S 85 kWh: 38 kWh per 100 miles (fueleconomy.gov)</td></tr>
-        <tr><td>Cells in the pack</td><td>${N_CELLS.toLocaleString("en-IN")}</td><td>Tesla Model S 85 kWh: 7,104 18650 cells in 16 modules (InsideEVs)</td></tr>
-      </tbody>
-    </table></div>
-    <p class="fine">The pack is ${N_CELLS.toLocaleString("en-IN")} identical NASA RW9 cells, about ${fmt((d.fullWh * N_CELLS) / 1000, 1)} kWh. It uses the Model S cell count and energy use, not the Model S's own cells.</p>
   </section>`;
 
   const b = series(best.trace, "Recommended", "#1f8a55");
