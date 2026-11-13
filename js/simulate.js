@@ -1,19 +1,6 @@
-/** Closed-loop charge on the RW9 digital twin.
- *
- * Two ways to handle the voltage limit:
- *  - "hold" (default): a charger voltage hold. When the twin first reaches the
- *    ceiling, an effective resistance is read off the twin,
- *    R = (V_ceiling - OCV(SOC)) / I, and from then on the current is
- *    I = min(schedule current, (V_ceiling - OCV(SOC)) / R), so it tapers as the
- *    cell fills. The twin still gives the temperature at that current.
- *  - "study": the rules in optimization.py. Each 30 s step that touches the
- *    ceiling lowers the current by 0.25 A, and the current never rises again.
- */
+/** Closed-loop charge on the digital-twin step, with the study's schedule rules. */
 
 import { energyDeliveredJ, scoreSession } from "./physics.js";
-import { lifeOf } from "./life.js";
-
-const DECISION_S = 30;
 
 function prefixEnergy(voltage, current, n) {
   return energyDeliveredJ(voltage.slice(0, n), current.slice(0, n));
@@ -24,97 +11,52 @@ export function rollout(family, params, session, twin) {
   const current = [];
   const voltage = [];
   const temperature = [];
-  const hold = session.cvMode !== "study";
-  const cv = { active: false, r: null, startS: null };
   let v0 = twin.v0;
   let t0 = twin.t0;
   let prevI = 0;
   let end = "time budget";
-  const nDec = Math.floor((session.maxMin * 60) / DECISION_S);
+  const nDec = Math.floor(session.maxMin * 60 / 30);
   const eReq = session.energyFraction * session.qAs * session.vNom;
   const socStart = session.socStart;
-  let charge = 0;
-  const socNow = () => Math.min(1, Math.max(0, socStart + charge / session.qAs));
-  const minCharge = session.space.minCharge;
+
+  const socNow = () => {
+    let acc = 0;
+    for (let i = 0; i < current.length; i++) acc += -current[i];
+    return Math.min(1, Math.max(0, socStart + acc / session.qAs));
+  };
 
   for (let d = 0; d < nDec; d++) {
     const state = { soc: socNow(), v0, t0, prevI };
     let target = family.target(state, ctx, params, session.space);
-    let vs;
-    let ts;
-    let amps;
-    let hit = false;
-
-    if (hold) {
-      const ceiling = family.ceiling(params, session.vMax, { phase: "cv" });
-      const sched = Math.abs(target);
-      amps = sched;
-      const holdAmps = cv.active ? Math.max(0, (ceiling - twin.ocv(state.soc)) / cv.r) : Infinity;
-      if (cv.active && sched > holdAmps) {
-        // The schedule asks for more than the cell takes at 4.2 V: hold the voltage.
-        amps = holdAmps;
-        if (amps < minCharge) {
-          end = "Voltage hold tapered out";
-          break;
-        }
-        const pred = twin.stepResponse(ceiling, t0, amps, Math.abs(prevI));
-        vs = new Array(DECISION_S).fill(ceiling);
-        ts = Array.from(pred.t);
-      } else {
-        // Below the limit (or resting): the twin gives voltage and temperature.
-        const pred = twin.stepResponse(v0, t0, sched, Math.abs(prevI));
-        vs = Array.from(pred.v);
-        ts = Array.from(pred.t);
-        if (sched > 0) {
-          const k = vs.findIndex((v) => v >= ceiling);
-          if (k >= 0) {
-            // Reached the limit at sample k: switch to the voltage hold.
-            if (!cv.active) {
-              const socK = Math.min(1, state.soc + (sched * (k + 1)) / session.qAs);
-              cv.active = true;
-              cv.startS = current.length + k;
-              cv.r = Math.max(0.01, (ceiling - twin.ocv(socK)) / sched);
-            }
-            for (let j = k; j < DECISION_S; j++) {
-              vs[j] = ceiling;
-              ts[j] = ts[k];
-            }
-          }
-        }
-      }
-      target = -amps;
-    } else {
-      // Study rules, as in optimization.ChargingSimulator.simulate.
-      if (session.energyMode && family.id === "cccv" && ctx.phase === "cv" && target !== 0) {
-        const iHold = Math.max(params.i_cutoff, 0.1, 0.1 * params.i_cc);
-        if (Math.abs(target) + 1e-9 < iHold) {
-          target = -iHold;
-          ctx.iLevel = iHold;
-        }
-      }
-      const ceiling = family.ceiling(params, session.vMax, ctx);
-      const pred = twin.stepResponse(v0, t0, Math.abs(target), Math.abs(prevI));
-      let cut = pred.v.length;
-      for (let k = 0; k < pred.v.length; k++) {
-        if (pred.v[k] >= ceiling) {
-          cut = k + 1;
-          hit = true;
-          break;
-        }
-      }
-      vs = Array.from(pred.v.subarray(0, cut));
-      ts = Array.from(pred.t.subarray(0, cut));
-      if (ctx.phase === "cv" && target !== 0 && vs.length > 0 && vs.length < DECISION_S) {
-        const vHold = Math.min(vs[vs.length - 1], ceiling);
-        const tHold = ts[ts.length - 1];
-        while (vs.length < DECISION_S) {
-          vs.push(vHold);
-          ts.push(tHold);
-        }
-        hit = true;
+    if (session.energyMode && family.id === "cccv" && ctx.phase === "cv" && target !== 0) {
+      const iHold = Math.max(params.i_cutoff, 0.1, 0.1 * params.i_cc);
+      if (Math.abs(target) + 1e-9 < iHold) {
+        target = -iHold;
+        ctx.iLevel = iHold;
       }
     }
-
+    const ceiling = family.ceiling(params, session.vMax, ctx);
+    const pred = twin.stepResponse(v0, t0, Math.abs(target), Math.abs(prevI));
+    let cut = pred.v.length;
+    let hit = false;
+    for (let k = 0; k < pred.v.length; k++) {
+      if (pred.v[k] >= ceiling) {
+        cut = k + 1;
+        hit = true;
+        break;
+      }
+    }
+    const vs = Array.from(pred.v.subarray(0, cut));
+    const ts = Array.from(pred.t.subarray(0, cut));
+    if (ctx.phase === "cv" && target !== 0 && vs.length > 0 && vs.length < 30) {
+      const vHold = Math.min(vs[vs.length - 1], ceiling);
+      const tHold = ts[ts.length - 1];
+      while (vs.length < 30) {
+        vs.push(vHold);
+        ts.push(tHold);
+      }
+      hit = true;
+    }
     const n = vs.length;
     if (n === 0) break;
     for (let k = 0; k < n; k++) {
@@ -122,7 +64,6 @@ export function rollout(family, params, session, twin) {
       voltage.push(vs[k]);
       temperature.push(ts[k]);
     }
-    charge += -target * n;
     if (target !== 0 && !ctx.inRest) ctx.chargeElapsed += n;
     v0 = vs[n - 1];
     t0 = ts[n - 1];
@@ -168,7 +109,11 @@ export function rollout(family, params, session, twin) {
       end = "SoC target";
       break;
     }
-    let familyEnd = hold ? null : family.endCheck(state, ctx, params, { ceilingHit: hit, stepSamples: n, target });
+    let familyEnd = family.endCheck(state, ctx, params, {
+      ceilingHit: hit,
+      stepSamples: n,
+      target,
+    });
     if (session.energyMode && familyEnd === "CV cutoff current") familyEnd = null;
     if (familyEnd) {
       end = familyEnd;
@@ -177,17 +122,5 @@ export function rollout(family, params, session, twin) {
   }
 
   const metrics = scoreSession(current, voltage, temperature, session, session.weights);
-  metrics.life = lifeOf({ current, temperature, soc: metrics.soc }, session);
-  metrics.cvStartMin = cv.startS != null && cv.startS < current.length ? cv.startS / 60 : null;
-  metrics.objective = objectiveLoss(metrics, session);
   return { current, voltage, temperature, end, metrics };
-}
-
-/** Loss the search minimises. "life": fewest replacements; "study": paper Eq. 10. */
-export function objectiveLoss(m, session) {
-  if (session.objective === "study") return m.loss;
-  const perCharge = m.life.perChargeLoss;
-  const base = perCharge > 0 ? 1000 * Math.log(perCharge) : 1e9;
-  // Same feasibility penalties as the study score, plus its small duration tie-break.
-  return base + 1e-3 * m.durationMin + m.penalty;
 }

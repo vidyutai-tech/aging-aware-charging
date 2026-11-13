@@ -1,14 +1,20 @@
-/** Trip energy and the study's session score (optimization.score_session, unchanged).
- *
- * Wear for one session is the paper's closed form:
- *   Q_cal = A_cal exp(B_cal SOC) exp(-(Ea_cal + C_cal SOC)/(R T)) t_h^z_cal  (session mean SOC and T)
- *   Q_cyc = sum_b B_b exp(-Ea_b/(R T)) (w_b Ah)^z_b                        (charge Ah, mean charge C-rate)
- * Life over many charges is in life.js.
- */
+/** Trip energy, calendar plus cyclic wear, reward, and life to 80% capacity. */
 
-export const WH_PER_KM = 135;
-export const N_CELLS = 6831;
-export const KELVIN = 273.15;
+/* Fixed inputs. Every value has a source.
+ *
+ * Vehicle: Tesla Model S, 85 kWh pack, a car built from 18650 cells.
+ *   WH_PER_KM: EPA combined rating 38 kWh per 100 miles
+ *              (fueleconomy.gov, 2013 Model S 85 kWh, vehicle id 33368) = 38000 / 160.9344 Wh/km.
+ *   N_CELLS:   7,104 18650 cells in 16 modules of 444 (InsideEVs, "Everything you need to know
+ *              about Tesla's lithium-ion batteries").
+ * Cell: NASA Randomized Battery Usage data set, cell RW9 (Bole, Kulkarni and Daigle, NASA Ames, 2014).
+ *   Q_AH:      2.2 Ah, q_nominal_ah in the research config (config.DEGRADATION).
+ *   Nominal voltage: mean of RW9's open-circuit voltage curve over 10-90 % charge (twin.OcvCurve),
+ *              computed from the NASA data; it arrives in data/pack.js as v_nom.
+ *   SOC_START, V_MAX, I_MAX: research config (SessionSpec, I_MAX_A).
+ */
+export const WH_PER_KM = 38000 / 160.9344;
+export const N_CELLS = 7104;
 export const Q_AH = 2.2;
 export const SOC_START = 0.2;
 export const V_MAX = 4.2;
@@ -56,19 +62,16 @@ export function cellWattHours(vNom) {
 }
 
 /** Pack energy, per-cell energy, and the charge fraction the study calls energy_fraction. */
-export function tripDemand(km, vNom, whPerKm = WH_PER_KM, nCells = N_CELLS) {
-  const packWh = whPerKm * km;
-  const cellWh = packWh / nCells;
+export function tripDemand(km, vNom) {
+  const packWh = WH_PER_KM * km;
+  const cellWh = packWh / N_CELLS;
   const fullWh = cellWattHours(vNom);
   const raw = fullWh > 0 ? cellWh / fullWh : 0;
   const room = 1 - SOC_START;
   const fraction = clamp(raw, 0, room);
-  const maxKm = (room * fullWh * nCells) / whPerKm;
+  const maxKm = (room * fullWh * N_CELLS) / WH_PER_KM;
   return {
     km,
-    whPerKm,
-    nCells,
-    packCapacityKwh: (fullWh * nCells) / 1000,
     packKwh: packWh / 1000,
     cellWh,
     fullWh,
@@ -94,7 +97,7 @@ export function energyDeliveredJ(voltage, current) {
   return Math.max(0, trapzUnit(power));
 }
 
-export function tentWeights(cRate) {
+function tentWeights(cRate) {
   const bins = DEG.bins;
   const n = bins.length;
   const w = new Array(n).fill(0);
@@ -186,3 +189,26 @@ export function scoreSession(current, voltage, temperature, session, weights) {
   };
 }
 
+/** 0.5C charge is anchored at 80% capacity after 600 equivalent charges. */
+export function lifeToEighty(qSession, qHalf) {
+  if (!(qSession > 0) || !(qHalf > 0)) return { cycles: null, extra: null, replacementRatio: null };
+  const cycles = 600 * qHalf / qSession;
+  return {
+    cycles,
+    extra: cycles - 600,
+    replacementRatio: 600 / cycles,
+  };
+}
+
+export function retentionCurve(qSession, qHalf, nMax = 900) {
+  const cycles = [];
+  const pct = [];
+  if (!(qHalf > 0)) return { cycles, pct };
+  const scale = 20 / (600 * qHalf);
+  const step = Math.max(1, Math.round(nMax / 180));
+  for (let n = 0; n <= nMax; n += step) {
+    cycles.push(n);
+    pct.push(clamp(100 - scale * n * qSession, 0, 100));
+  }
+  return { cycles, pct };
+}

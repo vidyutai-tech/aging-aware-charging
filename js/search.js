@@ -1,8 +1,6 @@
 /** Random search and a Gaussian-process search on the study score. */
 
 import { FAMILIES } from "./profiles.js";
-
-const FAMILY_ORDER = ["cccv", "two_step", "three_step", "pulsed"];
 import { rollout } from "./simulate.js";
 
 function mulberry32(seed) {
@@ -168,7 +166,7 @@ function propose(xs, ys, family, space, rng, acq, xi) {
 function consider(row, top) {
   top.push(row);
   top.sort((a, b) => a.loss - b.loss);
-  if (top.length > 400) top.length = 400;
+  if (top.length > 6) top.length = 6;
 }
 
 async function searchFamily(family, session, twin, opts, method, onTick) {
@@ -187,7 +185,7 @@ async function searchFamily(family, session, twin, opts, method, onTick) {
       family: family.short,
       method,
       params,
-      loss: out.metrics.objective,
+      loss: out.metrics.loss,
       reward: out.metrics.reward,
       feasible: out.metrics.feasible,
       metrics: out.metrics,
@@ -229,65 +227,26 @@ async function searchFamily(family, session, twin, opts, method, onTick) {
   return history;
 }
 
-const CURRENT_KEYS = {
-  cccv: ["i_cc"],
-  two_step: ["i1", "i2"],
-  three_step: ["i1", "i2", "i3"],
-  pulsed: ["i_charge", "i_floor"],
-};
-
-/** Keep a schedule's shape and change its pace: scale every current by the same
- * factor, so the schedule uses the time available instead of finishing early or late. */
-async function refinePace(family, rows, session, twin, method, onRow) {
-  const out = [];
-  for (const base of rows) {
-    for (let k = 0.7; k <= 1.3001; k += 0.03) {
-      if (Math.abs(k - 1) < 1e-9) continue;
-      const raw = { ...base.params };
-      for (const key of CURRENT_KEYS[family.id]) raw[key] = base.params[key] * k;
-      const params = family.clip(raw, session.space);
-      const res = rollout(family, params, session, twin);
-      const row = { familyId: family.id, family: family.short, method, params, loss: res.metrics.objective,
-        reward: res.metrics.reward, feasible: res.metrics.feasible, metrics: res.metrics, end: res.end };
-      delete row.metrics.soc;
-      out.push(row);
-      await onRow(row);
-    }
-  }
-  return out;
-}
-
 export async function planCharge(session, twin, options, onProgress) {
   const families = options.families.map((id) => FAMILIES[id]).filter(Boolean);
   const methods = options.methods;
   const feasible = [];
   const fallback = [];
   let tested = 0;
-  const budget = families.length * methods.length * (options.nCalls + 60);
+  const budget = families.length * methods.length * options.nCalls;
   for (let m = 0; m < methods.length; m++) {
     for (let f = 0; f < families.length; f++) {
-      // Seed by schedule type, so a type gives the same answer whatever else is ticked.
-      const seed = (options.seed + m * 1009 + FAMILY_ORDER.indexOf(families[f].id) * 17) >>> 0;
-      const onRow = async (row) => {
+      const seed = (options.seed + m * 1009 + f * 17) >>> 0;
+      await searchFamily(families[f], session, twin, { ...options, seed }, methods[m], async (row) => {
         tested += 1;
         consider(row, row.feasible ? feasible : fallback);
         if (tested % 2 === 0 && onProgress) {
-          onProgress(Math.min(1, tested / Math.max(budget, 1)), tested);
+          onProgress(tested / Math.max(budget, 1), tested);
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
-      };
-      const history = await searchFamily(families[f], session, twin, { ...options, seed }, methods[m], onRow);
-      // Refine the pace of this type's three best feasible schedules (or best three if none finish).
-      const ok = history.filter((h) => h.feasible);
-      const bestRows = (ok.length ? ok : history).slice().sort((a, b) => a.loss - b.loss).slice(0, 3);
-      await refinePace(families[f], bestRows, session, twin, methods[m], onRow);
+      });
     }
   }
   const pool = feasible.length ? feasible : fallback;
-  // Best of each schedule type first, then the next best overall, up to six.
-  const bestOf = new Map();
-  for (const row of pool) if (!bestOf.has(row.familyId)) bestOf.set(row.familyId, row);
-  const top = [...bestOf.values()].sort((a, b) => a.loss - b.loss);
-  for (const row of pool) if (top.length < 6 && !top.includes(row)) top.push(row);
-  return { top, tested };
+  return { top: pool.slice(0, 6), tested };
 }
