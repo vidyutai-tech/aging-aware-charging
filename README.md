@@ -14,7 +14,7 @@ To try it locally, run `python3 -m http.server` in this folder and open `http://
 
 ## Logos
 
-`assets/logo-left.svg` and `assets/logo-right.svg` are placeholders. Replace them with your files. If your logos are PNG, change the two `src` attributes at the top of `index.html`.
+`assets/spel.png` and `assets/logo-right.svg` are placeholders. Replace them with your files. If your logos are PNG, change the two `src` attributes at the top of `index.html`.
 
 ## Layout
 
