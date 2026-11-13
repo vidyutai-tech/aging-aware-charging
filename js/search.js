@@ -232,6 +232,7 @@ export async function planCharge(session, twin, options, onProgress) {
   const methods = options.methods;
   const feasible = [];
   const fallback = [];
+  const byFamily = {};
   let tested = 0;
   const budget = families.length * methods.length * options.nCalls;
   for (let m = 0; m < methods.length; m++) {
@@ -240,6 +241,9 @@ export async function planCharge(session, twin, options, onProgress) {
       await searchFamily(families[f], session, twin, { ...options, seed }, methods[m], async (row) => {
         tested += 1;
         consider(row, row.feasible ? feasible : fallback);
+        // Best schedule of each type: a feasible one beats any infeasible one, then lowest loss.
+        const cur = byFamily[row.familyId];
+        if (!cur || (row.feasible && !cur.feasible) || (row.feasible === cur.feasible && row.loss < cur.loss)) byFamily[row.familyId] = row;
         if (tested % 2 === 0 && onProgress) {
           onProgress(tested / Math.max(budget, 1), tested);
           await new Promise((resolve) => setTimeout(resolve, 0));
@@ -248,5 +252,5 @@ export async function planCharge(session, twin, options, onProgress) {
     }
   }
   const pool = feasible.length ? feasible : fallback;
-  return { top: pool.slice(0, 6), tested };
+  return { top: pool.slice(0, 6), tested, byFamily: families.map((f) => byFamily[f.id]).filter(Boolean) };
 }

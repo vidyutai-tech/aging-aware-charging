@@ -4,7 +4,7 @@
 
 import { mountChart } from "./charts.js";
 import { FAMILIES, baselineParams, describeParams } from "./profiles.js";
-import { SOC_START, SPACE, V_MAX, lifeToEighty, retentionCurve, tripDemand } from "./physics.js";
+import { N_CELLS, SOC_START, SPACE, V_MAX, WH_PER_KM, lifeToEighty, retentionCurve, tripDemand } from "./physics.js";
 import { planCharge } from "./search.js";
 import { rollout } from "./simulate.js";
 import { loadTwin } from "./twin.js";
@@ -35,7 +35,19 @@ function fmt(n, digits = 1) {
   if (n == null || !Number.isFinite(n)) return "–";
   return n.toLocaleString("en-IN", { maximumFractionDigits: digits, minimumFractionDigits: digits });
 }
-const sci = (n) => (n > 0 ? n.toExponential(2) : "–");
+
+function vehicle() {
+  const eff = Number($("eff").value); // kWh/km
+  const whkm = eff > 0 ? eff * 1000 : 0;
+  const cells = Math.round(Number($("cells").value));
+  return { whkm: whkm > 0 ? whkm : WH_PER_KM, cells: cells > 0 ? cells : N_CELLS };
+}
+
+function updatePackNote() {
+  const v = vehicle();
+  const d = tripDemand(Number($("km").value) || 0, twin.vNom, v.whkm, v.cells);
+  $("pack-note").textContent = `Pack: ${v.cells.toLocaleString("en-IN")} cells of ${fmt(d.fullWh, 2)} Wh, about ${fmt(d.packCapacityKwh, 1)} kWh. Each charge starts at ${Math.round(SOC_START * 100)}%. Between charges the car is parked at the average of its start and end charge.`;
+}
 
 function sessionFor(fraction, maxMin) {
   return {
@@ -51,21 +63,13 @@ function sessionFor(fraction, maxMin) {
   };
 }
 
-function within(m, minutes) {
-  if (m.durationMin > minutes + 1e-9) return `Needs ${fmt(m.durationMin, 0)} min`;
-  if (m.feasible) return "Yes";
-  if (m.eNorm < 1 - 1e-3) return "Fell short";
-  return "Went over 4.2 V";
-}
-
 function series(trace, name, color, dash) {
-  const n = trace.current.length;
-  const t = Array.from({ length: n }, (_, i) => i / 60);
+  const t = trace.current.map((_, i) => i / 60);
   return {
     amps: { name, color, dash, x: t, y: trace.current.map((c) => Math.max(0, -c)) },
     volt: { name, color, dash, x: t, y: trace.voltage },
     temp: { name, color, dash, x: t, y: trace.temperature },
-    soc: { name, color, dash, x: t, y: trace.metrics.soc.map((s) => s * 100) },
+    soc: { name, color, dash, x: t, y: trace.metrics.soc.map((v) => v * 100) },
   };
 }
 
@@ -74,14 +78,41 @@ function draw(id, spec) {
   charts[id].set(spec);
 }
 
-function legend() {
-  return '<div class="legend"><span><i class="sw best"></i>Recommended</span><span><i class="sw ref"></i>CCCV 0.5C</span></div>';
+function legend(limit = false) {
+  return `<div class="legend"><span><i class="sw best"></i>Recommended</span><span><i class="sw ref"></i>CCCV 0.5C</span>${limit ? '<span><i class="sw lim"></i>4.2 V limit</span>' : ""}</div>`;
 }
 
-function render(req, d, baselines, best, tested) {
+const rupees = (n) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+
+function lifeBars(rows, best, life, cost) {
+  const items = rows.map((row) => {
+    const pick = row.familyId === best.familyId;
+    const pct = row.feasible ? (life(row.metrics) / 600 - 1) * 100 : null;
+    return { name: row.family, pick, pct };
+  });
+  const span = Math.max(5, ...items.map((it) => Math.abs(it.pct ?? 0)));
+  // Money saved = % change in cycles to 80% × battery cost (negative means extra cost).
+  const money = (pct) => {
+    const v = (pct / 100) * cost;
+    return v >= 0 ? `<b>${rupees(v)}</b> saved` : `<b>${rupees(-v)}</b> extra cost`;
+  };
+  return `<div class="bars"><div class="bars-head"><span>Schedule</span><span></span><span>Cycles</span><span>Money saved</span></div>${items.map((it) => {
+    if (it.pct == null) return `<div class="bar-row"><span class="bar-name">${it.name}</span><span class="bar-track"></span><span class="bar-val muted">Did not finish in time</span><span class="bar-money">–</span></div>`;
+    const w = (Math.abs(it.pct) / span) * 50;
+    const side = it.pct >= 0 ? `left:50%;width:${w}%` : `left:${50 - w}%;width:${w}%`;
+    return `<div class="bar-row${it.pick ? " pick" : ""}"><span class="bar-name">${it.name}${it.pick ? " (recommended)" : ""}</span><span class="bar-track"><i class="${it.pct >= 0 ? "up" : "down"}" style="${side}"></i></span><span class="bar-val ${it.pct >= 0 ? "up" : "down"}">${it.pct >= 0 ? "+" : "−"}${fmt(Math.abs(it.pct), 1)}%</span><span class="bar-money">${money(it.pct)}</span></div>`;
+  }).join("")}</div>`;
+}
+
+function render(req, d, baselines, best, top, tested, byFamily) {
   const half = baselines[0];
   const qHalf = half.metrics.qTotal;
   const life = (m) => lifeToEighty(m.qTotal, qHalf).cycles;
+  // Time saved against CCCV 0.5C, as a share of its charge time.
+  const faster = best.metrics.feasible && half.metrics.durationMin > 0
+    ? (1 - best.metrics.durationMin / half.metrics.durationMin) * 100
+    : null;
+  const gain = faster != null && faster >= 1 ? `<div class="vcard gain"><div class="k">Benefit</div><div class="v">${fmt(faster, 0)}%</div><div class="s">faster charging than CCCV 0.5C</div></div>` : "";
   const warn = [];
   if (d.capped) warn.push(`A charge from 20% cannot hold this whole trip. The plan uses the largest charge that fits, enough for about ${fmt(d.maxKm, 0)} km.`);
   if (!best.metrics.feasible) warn.push(`No schedule delivered the trip energy within ${fmt(req.minutes, 0)} min and 4.2 V. Allow more time or a shorter trip.`);
@@ -99,29 +130,27 @@ function render(req, d, baselines, best, tested) {
       </div>
       <div class="vcard best"><div class="k">Recommended</div><div class="v">${fmt(best.metrics.durationMin, 1)} min</div><div class="s">${best.metrics.feasible ? `${fmt(life(best.metrics), 0)} charges to 80% capacity` : "Trip energy not delivered"}</div></div>
       <div class="vcard ref"><div class="k">CCCV 0.5C</div><div class="v">${fmt(half.metrics.durationMin, 1)} min</div><div class="s">600 charges to 80% capacity (reference)</div></div>
+      ${gain}
     </div>
 
-    <h3 class="sub-title">The charge</h3>
     <div class="charts">
       <article class="panel"><h4>Charge current</h4>${legend()}<div class="plot"><canvas id="c-i"></canvas></div></article>
-      <article class="panel"><h4>Cell voltage</h4>${legend()}<div class="plot"><canvas id="c-v"></canvas></div></article>
+      <article class="panel"><h4>Cell voltage</h4>${legend(true)}<div class="plot"><canvas id="c-v"></canvas></div></article>
       <article class="panel"><h4>Cell temperature</h4>${legend()}<div class="plot"><canvas id="c-t"></canvas></div></article>
       <article class="panel"><h4>State of charge</h4>${legend()}<div class="plot"><canvas id="c-s"></canvas></div></article>
     </div>
 
-    <h3 class="sub-title">Capacity over repeated charges</h3>
-    <p class="sub-lede">As in the research code: each charge adds its wear Q = Q<sub>cal</sub> + Q<sub>cyc</sub>, and CCCV 0.5C is set to 80% capacity at 600 charges.</p>
+    <h3 class="sub-title">Pack life</h3>
+    <p class="sub-lede">Capacity left after repeated charges like this one. CCCV 0.5C is the normal-usage reference: 80% capacity after 600 cycles.</p>
     <div class="charts">
-      <article class="panel wide">${legend()}<div class="plot tall"><canvas id="c-life"></canvas></div></article>
+      <article class="panel wide"><div class="legend"><span><i class="sw best"></i>Recommended</span><span><i class="sw ref"></i>CCCV 0.5C</span><span><i class="sw lim"></i>End of life (80%)</span></div><div class="plot tall"><canvas id="c-life"></canvas></div></article>
     </div>
 
-    <h3 class="sub-title">Standard charges and the recommendation</h3>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Charge</th><th class="n">Time (min)</th><th class="n">Peak °C</th><th class="n">Q<sub>cal</sub></th><th class="n">Q<sub>cyc</sub></th><th class="n">Q total</th><th class="n">Charges to 80%</th><th class="n">Study score</th><th>Within limits</th></tr></thead>
-      <tbody>
-        ${[...baselines, { ...best, name: "Recommended" }].map((r) => `<tr class="${r.name === "Recommended" ? "pick" : ""}"><td>${r.name}</td><td class="n">${fmt(r.metrics.durationMin)}</td><td class="n">${fmt(r.metrics.peakT)}</td><td class="n">${sci(r.metrics.qCalendar)}</td><td class="n">${sci(r.metrics.qCyclic)}</td><td class="n">${sci(r.metrics.qTotal)}</td><td class="n">${fmt(life(r.metrics), 0)}</td><td class="n">${fmt(r.metrics.reward, 1)}</td><td>${within(r.metrics, req.minutes)}</td></tr>`).join("")}
-      </tbody>
-    </table></div>
+    <h3 class="sub-title">Lifetime compared with normal usage</h3>
+    <p class="sub-lede">Change in cycles to 80% capacity against CCCV 0.5C (600 cycles), for the best schedule of each type searched. Money saved is that change multiplied by the battery cost of ${rupees(req.cost)}.</p>
+    <div class="charts">
+      <article class="panel wide">${lifeBars(byFamily, best, life, req.cost)}</article>
+    </div>
   </section>`;
 
   const b = series(best.trace, "Recommended", "#1f8a55");
@@ -132,11 +161,11 @@ function render(req, d, baselines, best, tested) {
   draw("c-t", { xLabel: "Time (min)", yLabel: "Temperature (°C)", series: [b.temp, r.temp], formatY: (y) => `${y.toFixed(2)} °C`, formatX: fx });
   draw("c-s", { xLabel: "Time (min)", yLabel: "State of charge (%)", series: [b.soc, r.soc], yMin: 0, yMax: 100, formatY: (y) => `${y.toFixed(1)}%`, formatX: fx });
 
-  const nMax = Math.max(900, Math.ceil(1.2 * Math.max(600, life(best.metrics) || 0) / 100) * 100);
+  const nMax = Math.max(900, Math.ceil((1.2 * Math.max(600, life(best.metrics) || 0)) / 100) * 100);
   const cb = retentionCurve(best.metrics.qTotal, qHalf, nMax);
   const cr = retentionCurve(qHalf, qHalf, nMax);
   draw("c-life", {
-    xLabel: "Charges",
+    xLabel: "Cycles",
     yLabel: "Capacity remaining (%)",
     series: [
       { name: "Recommended", color: "#1f8a55", x: cb.cycles, y: cb.pct },
@@ -146,15 +175,20 @@ function render(req, d, baselines, best, tested) {
     yMin: 70,
     yMax: 100,
     formatY: (y) => `${y.toFixed(1)}%`,
-    formatX: (x) => `${Math.round(x)} charges`,
+    formatX: (x) => `${Math.round(x)} cycles`,
   });
 }
 
 async function run(evt) {
   if (evt) evt.preventDefault();
-  const req = { km: Number($("km").value), minutes: Number($("minutes").value) };
+  const req = { km: Number($("km").value), minutes: Number($("minutes").value), cost: Math.max(0, Number($("cost").value) || 0) };
   if (!(req.km > 0) || !(req.minutes > 0)) {
     statusEl.textContent = "Enter a distance and a time above zero.";
+    return;
+  }
+  const families = [...form.querySelectorAll('input[name="family"]:checked')].map((el) => el.value);
+  if (!families.length) {
+    statusEl.textContent = "Select at least one charging schedule to search.";
     return;
   }
   go.disabled = true;
@@ -163,7 +197,8 @@ async function run(evt) {
   statusEl.textContent = "Charging the standard CCCV 0.5C, 1C and 2C schedules…";
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  const d = tripDemand(req.km, twin.vNom);
+  const v = vehicle();
+  const d = tripDemand(req.km, twin.vNom, v.whkm, v.cells);
   // Standard charges run in the research session (up to 150 min), so each finishes.
   const base = sessionFor(d.energyFraction, Math.max(req.minutes, RESEARCH.baselineMaxMin));
   const baselines = [0.5, 1, 2].map((c) => {
@@ -174,7 +209,7 @@ async function run(evt) {
 
   const session = sessionFor(d.energyFraction, req.minutes);
   const t0 = performance.now();
-  const result = await planCharge(session, twin, RESEARCH, (frac) => {
+  const result = await planCharge(session, twin, { ...RESEARCH, families }, (frac) => {
     bar.style.width = `${Math.round(3 + frac * 97)}%`;
     statusEl.textContent = `Searching schedules… ${Math.round(frac * 100)}%`;
   });
@@ -187,7 +222,7 @@ async function run(evt) {
   progress.hidden = true;
   go.disabled = false;
   for (const key of Object.keys(charts)) delete charts[key];
-  render(req, d, baselines, best, result.tested);
+  render(req, d, baselines, best, result.top, result.tested, result.byFamily);
 }
 
 function fail(err) {
@@ -196,6 +231,27 @@ function fail(err) {
   go.disabled = false;
   progress.hidden = true;
 }
+
+// Vehicle type buttons set the cell count and efficiency. Editing either by hand clears the highlight.
+const vehicleButtons = [...document.querySelectorAll(".presets button")];
+function markVehicle() {
+  for (const btn of vehicleButtons) {
+    btn.classList.toggle("on", btn.dataset.cells === $("cells").value && btn.dataset.eff === $("eff").value);
+  }
+}
+for (const btn of vehicleButtons) {
+  btn.addEventListener("click", () => {
+    $("cells").value = btn.dataset.cells;
+    $("eff").value = btn.dataset.eff;
+    markVehicle();
+    updatePackNote();
+    run().catch(fail);
+  });
+}
+for (const id of ["cells", "eff"]) $(id).addEventListener("input", markVehicle);
+
+for (const id of ["km", "eff", "cells"]) $(id).addEventListener("input", updatePackNote);
+updatePackNote();
 
 form.addEventListener("submit", (evt) => run(evt).catch(fail));
 run().catch(fail);
