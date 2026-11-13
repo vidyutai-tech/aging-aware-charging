@@ -18,6 +18,7 @@ const progress = $("progress");
 const bar = $("bar");
 const go = $("go");
 const twin = loadTwin(globalThis.PACK_DATA);
+const rupees = (n) => `₹${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
 const charts = {};
 
 function fmt(n, digits = 1) {
@@ -133,6 +134,34 @@ function render(req, d, baselines, best, top, tested, byFamily, cfg) {
   const warn = [];
   if (d.capped) warn.push(`A charge from ${Math.round(d.socStart * 100)}% cannot hold this whole trip. The plan uses the largest charge that fits, enough for about ${fmt(d.maxKm, 0)} km.`);
   if (!best.metrics.feasible) warn.push(`No schedule delivered the trip energy within ${fmt(req.minutes, 0)} min and ${fmt(cfg.vMax, 2)} V. Allow more time or a shorter trip.`);
+
+  const faster = half.metrics.durationMin > 0.5
+    ? Math.round((1 - best.metrics.durationMin / half.metrics.durationMin) * 100)
+    : 0;
+  const benefit = Math.abs(faster) < 1
+    ? "About the same time as CCCV 0.5C"
+    : faster > 0
+      ? `${faster}% faster charging than CCCV 0.5C`
+      : `${-faster}% slower charging than CCCV 0.5C`;
+  const bestLife = life(best.metrics);
+  const refLife = life(half.metrics);
+  const extra = Number.isFinite(bestLife) && Number.isFinite(refLife) ? bestLife - refLife : null;
+  const lifePct = extra == null || !(refLife > 0) ? null : (100 * extra) / refLife;
+  const lifeClass = lifePct == null || Math.abs(lifePct) < 0.05 ? "" : lifePct > 0 ? "gain" : "ref";
+  const lifeValue = lifePct == null ? "—" : `${lifePct >= 0 ? "+" : "−"}${fmt(Math.abs(lifePct), 1)}%`;
+  const saved = lifePct == null ? null : (lifePct / 100) * req.cost;
+  const moneyNote = saved == null || !(req.cost > 0)
+    ? ""
+    : saved >= 0
+      ? ` ${rupees(saved)} saved on the ${rupees(req.cost)} battery.`
+      : ` ${rupees(-saved)} extra cost on the ${rupees(req.cost)} battery.`;
+  const lifeNote = extra == null
+    ? "Charges until capacity falls to 80%"
+    : Math.abs(extra) < 0.5
+      ? `Same life as CCCV 0.5C, to 80% capacity.${moneyNote}`
+      : extra > 0
+        ? `${fmt(extra, 0)} more charges before capacity falls to 80%.${moneyNote}`
+        : `${fmt(-extra, 0)} fewer charges before capacity falls to 80%.${moneyNote}`;
 
   out.innerHTML = `
   <section class="result" aria-labelledby="res-title">
@@ -255,4 +284,15 @@ for (const id of ["km", "eff", "cells", "cellwh", "soc0"]) $(id).addEventListene
 updatePackNote();
 
 form.addEventListener("submit", (evt) => run(evt).catch(fail));
+for (const btn of document.querySelectorAll("#vehicles button")) {
+  btn.addEventListener("click", () => {
+    const v = VEHICLES[btn.dataset.vehicle];
+    $("kwhkm").value = String(v.kwh);
+    $("cells").value = String(v.cells);
+    $("cost").value = String(v.cost);
+    updatePackNote();
+  });
+}
+for (const id of ["kwhkm", "cells", "cost"]) $(id).addEventListener("input", updatePackNote);
+updatePackNote();
 run().catch(fail);
