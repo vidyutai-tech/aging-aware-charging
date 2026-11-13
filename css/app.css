@@ -181,7 +181,7 @@ button, input, select { font: inherit; color: inherit; }
 .story { max-width: 75ch; margin: 22px auto 0; text-align: center; }
 
 .sub-title { text-align: center; font-size: clamp(24px, 2.8vw, 34px); margin-top: 52px; }
-.sub-lede { text-align: center; color: var(--muted); max-width: 70ch; margin: 8px auto 0; }
+.sub-lede { text-align: center; color: var(--muted); max-width: none; margin: 8px 0 0; }
 
 /* Charge view */
 .live { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 22px; }

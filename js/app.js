@@ -231,23 +231,29 @@ function fail(err) {
   progress.hidden = true;
 }
 
-// Vehicle type buttons set the cell count and efficiency. Editing either by hand clears the highlight.
-const vehicleButtons = [...document.querySelectorAll(".presets button")];
+// Vehicle type buttons fill every vehicle field from the sourced presets in index.html.
+// All fields stay editable; editing one by hand clears the highlight.
+const VEHICLE_FIELDS = ["eff", "hours", "park", "cellwh", "cells", "cost"];
+const vehicleButtons = [...document.querySelectorAll(".presets.vehicles button")];
 function markVehicle() {
+  let shown = null;
   for (const btn of vehicleButtons) {
-    btn.classList.toggle("on", btn.dataset.cells === $("cells").value && btn.dataset.eff === $("eff").value);
+    const match = VEHICLE_FIELDS.every((id) => Number(btn.dataset[id]) === Number($(id).value));
+    btn.classList.toggle("on", match);
+    if (match) shown = btn;
   }
+  $("veh-src").textContent = shown ? `Source: ${shown.dataset.src}` : "Custom values.";
 }
 for (const btn of vehicleButtons) {
   btn.addEventListener("click", () => {
-    $("cells").value = btn.dataset.cells;
-    $("eff").value = btn.dataset.eff;
+    for (const id of VEHICLE_FIELDS) $(id).value = btn.dataset[id];
     markVehicle();
     updatePackNote();
     run().catch(fail);
   });
 }
-for (const id of ["cells", "eff"]) $(id).addEventListener("input", markVehicle);
+for (const id of VEHICLE_FIELDS) $(id).addEventListener("input", markVehicle);
+markVehicle();
 
 buildAdvanced($("adv-grid"), $("adv-count"), $("adv-reset"));
 

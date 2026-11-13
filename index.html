@@ -39,26 +39,31 @@
       <section class="step">
         <h3><span class="badge">2</span>The vehicle and how it is used</h3>
         <div class="presets vehicles" role="group" aria-label="Vehicle type">
-          <button type="button" data-cells="360" data-eff="0.030">Two-wheeler</button>
-          <button type="button" data-cells="900" data-eff="0.075">Three-wheeler</button>
-          <button type="button" data-cells="3550" data-eff="0.135" class="on">Compact car</button>
-          <button type="button" data-cells="7104" data-eff="0.236">Large car</button>
+          <button type="button" data-eff="0.024" data-hours="93" data-park="28" data-cellwh="8.46" data-cells="414" data-cost="44339"
+            data-src="TVS iQube 3.5 kWh: 3.5 kWh ÷ 145 km IDC certified range (TVS Motor; no real-world figure published). 30 km/day (ORF, 27–33 km). Cost: BNEF 2025, $133/kWh for two- and three-wheeler packs.">Two-wheeler</button>
+          <button type="button" data-eff="0.068" data-hours="22" data-park="28" data-cellwh="8.46" data-cells="1211" data-cost="129722"
+            data-src="Mahindra Treo Plus: 10.24 kWh ÷ 150 km real-world range (Mahindra; ARAI certified 167 km). 130 km/day (CEEW, 100–160 km). Cost: BNEF 2025, $133/kWh for two- and three-wheeler packs.">Three-wheeler</button>
+          <button type="button" data-eff="0.145" data-hours="114" data-park="28" data-cellwh="8.46" data-cells="3570" data-cost="284776" class="on"
+            data-src="Tata Nexon EV 30.2 kWh: 145 Wh/km in Autocar India's road test (ARAI certified 96.8 Wh/km, 312 km). 35 km/day (CSBC). Cost: BNEF 2025, $99/kWh for EV packs.">Compact car</button>
+          <button type="button" data-eff="0.187" data-hours="220" data-park="28" data-cellwh="8.46" data-cells="8866" data-cost="707225"
+            data-src="Tata Harrier EV 75 kWh: 75 kWh ÷ 401 km tested by Autocar India (MIDC certified 622 km). 35 km/day (CSBC). Cost: BNEF 2025, $99/kWh for EV packs.">Large car</button>
         </div>
+        <p class="note" id="veh-src"></p>
         <div class="tiles three">
           <label class="tile">
             <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><path d="M6 30l5-12h26l5 12v8H6z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="38" r="4" fill="#fff" stroke="currentColor" stroke-width="3"/><circle cx="34" cy="38" r="4" fill="#fff" stroke="currentColor" stroke-width="3"/><path d="M25 20l-4 6h6l-4 6" fill="none" stroke="#f2b632" stroke-width="2.5"/></svg>
             <span class="tile-body"><span class="tile-name">Efficiency</span>
-            <span class="num"><input id="eff" type="number" min="0.01" max="0.4" step="0.001" value="0.135"><span class="unit">kWh/km</span></span></span>
+            <span class="num"><input id="eff" type="number" min="0.01" max="0.4" step="0.001" value="0.145"><span class="unit">kWh/km</span></span></span>
           </label>
           <label class="tile">
             <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="9" width="38" height="33" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><path d="M5 18h38M14 4v9M34 4v9" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="30" r="4" fill="#f2b632"/></svg>
             <span class="tile-body"><span class="tile-name">Time between charges</span>
-            <span class="num"><input id="hours" type="number" min="2" max="336" step="1" value="24"><span class="unit">h</span></span></span>
+            <span class="num"><input id="hours" type="number" min="2" max="336" step="1" value="114"><span class="unit">h</span></span></span>
           </label>
           <label class="tile">
             <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><path d="M20 30V9a4 4 0 0 1 8 0v21a8 8 0 1 1-8 0z" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="37" r="4" fill="#d9692f"/><path d="M24 33V18" stroke="#d9692f" stroke-width="3"/></svg>
             <span class="tile-body"><span class="tile-name">Parked temperature</span>
-            <span class="num"><input id="park" type="number" min="-10" max="50" step="1" value="25"><span class="unit">°C</span></span></span>
+            <span class="num"><input id="park" type="number" min="-10" max="50" step="1" value="28"><span class="unit">°C</span></span></span>
           </label>
         </div>
         <details class="pack-more">
@@ -72,20 +77,21 @@
             <label class="tile">
               <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="8" width="9" height="32" rx="2"/><rect x="19.5" y="8" width="9" height="32" rx="2"/><rect x="33" y="8" width="9" height="32" rx="2"/></g><path d="M8 30h5M21.5 30h5M35 30h5" stroke="#2e9e62" stroke-width="6"/></svg>
               <span class="tile-body"><span class="tile-name">Cells in the pack</span>
-              <span class="num"><input id="cells" type="number" min="100" max="20000" step="1" value="3550"><span class="unit">cells</span></span></span>
+              <span class="num"><input id="cells" type="number" min="100" max="20000" step="1" value="3570"><span class="unit">cells</span></span></span>
             </label>
             <label class="tile">
               <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><rect x="15" y="8" width="18" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><path d="M20 4h8" stroke="currentColor" stroke-width="3"/><path d="M26 15l-5 9h6l-5 9" fill="none" stroke="#f2b632" stroke-width="2.5" stroke-linejoin="round"/></svg>
               <span class="tile-body"><span class="tile-name">Capacity of one cell</span>
-              <span class="num"><input id="cellwh" type="number" min="1" max="200" step="0.01" value="7.81"><span class="unit">Wh</span></span></span>
+              <span class="num"><input id="cellwh" type="number" min="1" max="200" step="0.01" value="8.46"><span class="unit">Wh</span></span></span>
             </label>
             <label class="tile">
               <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="13" width="34" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><path d="M39 21h4v8h-4" fill="none" stroke="currentColor" stroke-width="3"/><path d="M17 19h10M17 24h10M17 19c6 0 6 7 0 7l8 6" fill="none" stroke="#f2b632" stroke-width="2.5" stroke-linejoin="round"/></svg>
               <span class="tile-body"><span class="tile-name">Battery cost</span>
-              <span class="num"><span class="unit">₹</span><input id="cost" class="wide" type="number" min="0" step="1000" value="500000"></span></span>
+              <span class="num"><span class="unit">₹</span><input id="cost" class="wide" type="number" min="0" step="1000" value="284776"></span></span>
             </label>
           </div>
           <p class="note" id="pack-note"></p>
+          <p class="note">Common to all vehicles. Time between charges = 0.8 × range ÷ daily distance × 24 h (driven down to 20%, then recharged). Parked temperature: mean of IMD Ahmedabad monthly normal maximum and minimum temperatures (2010–2019). Capacity of one cell: NASA RW9, 2.2 Ah × 3.845 V mean open-circuit voltage. Cells in the pack = pack energy ÷ 8.46 Wh, in NASA RW9 cells. Battery cost = pack kWh × BNEF 2025 pack price × ₹95.2492 per US$ (RBI reference rate, 6 Nov 2026).</p>
         </details>
       </section>
 

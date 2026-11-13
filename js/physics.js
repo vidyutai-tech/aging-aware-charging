@@ -1,22 +1,19 @@
 /** Trip energy, calendar plus cyclic wear, reward, and life to 80% capacity. */
 
-/* Fixed inputs. Every value has a source.
- *
- * Vehicle: Tesla Model S, 85 kWh pack, a car built from 18650 cells.
- *   WH_PER_KM: EPA combined rating 38 kWh per 100 miles
- *              (fueleconomy.gov, 2013 Model S 85 kWh, vehicle id 33368) = 38000 / 160.9344 Wh/km.
- *   N_CELLS:   7,104 18650 cells in 16 modules of 444 (InsideEVs, "Everything you need to know
- *              about Tesla's lithium-ion batteries").
+/* Fallback values, used only when a vehicle field on the page is left blank. They are the
+ * compact-car preset (index.html), which lists its sources.
+ *   WH_PER_KM: Tata Nexon EV 30.2 kWh, 145 Wh/km in Autocar India's road test.
+ *   N_CELLS:   30.2 kWh ÷ 8.46 Wh, the pack expressed in NASA RW9 cells.
  * Cell: NASA Randomized Battery Usage data set, cell RW9 (Bole, Kulkarni and Daigle, NASA Ames, 2014).
  *   Q_AH:      2.2 Ah, q_nominal_ah in the research config (config.DEGRADATION).
- *   Nominal voltage: mean of RW9's open-circuit voltage curve over 10-90 % charge (twin.OcvCurve),
- *              computed from the NASA data; it arrives in data/pack.js as v_nom.
+ *   CELL_WH:   2.2 Ah × 3.845 V, the mean of RW9's open-circuit voltage curve over 10-90 % charge
+ *              (twin.OcvCurve). The measured 2 A reference discharge gives 2.098 Ah and 7.81 Wh.
  *   SOC_START, V_MAX, I_MAX: research config (SessionSpec, I_MAX_A).
  */
-export const WH_PER_KM = 38000 / 160.9344;
-export const N_CELLS = 7104;
+export const WH_PER_KM = 145;
+export const N_CELLS = 3570;
 export const Q_AH = 2.2;
-export const CELL_WH = 7.81; // default energy of one cell (Wh), editable on the page
+export const CELL_WH = 8.46; // default energy of one cell (Wh), editable on the page
 export const SOC_START = 0.2;
 export const V_MAX = 4.2;
 export const I_MAX = 4.616;
