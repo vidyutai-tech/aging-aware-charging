@@ -100,13 +100,11 @@ export function lifeOf(trace, session) {
 export function capacityCurve(life, nMax, points = 200) {
   const x = [];
   const y = [];
-  const cal = [];
   for (let k = 0; k <= points; k++) {
     const n = (nMax * k) / points;
     const q = lossAfter(n, life);
     x.push(n);
     y.push(Math.max(0, 100 * (1 - q.q)));
-    cal.push(Math.max(0, 100 * (1 - q.qCal)));
   }
-  return { x, y, cal };
+  return { x, y };
 }

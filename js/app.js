@@ -1,6 +1,6 @@
 import { mountChart } from "./charts.js";
 import { capacityCurve } from "./life.js";
-import { END_TEXT, FAMILIES, baselineParams, describeParams } from "./profiles.js";
+import { FAMILIES, baselineParams, describeParams } from "./profiles.js";
 import { Q_AH, SOC_START, SPACE, V_MAX, tripDemand } from "./physics.js";
 import { planCharge } from "./search.js";
 import { rollout } from "./simulate.js";
@@ -25,7 +25,6 @@ function fmt(n, digits = 1) {
   if (!Number.isFinite(n)) return "never";
   return n.toLocaleString("en-IN", { maximumFractionDigits: digits, minimumFractionDigits: digits });
 }
-const sci = (n) => (n > 0 ? n.toExponential(2) : "–");
 const methodName = (id) => (id === "gp_bo" ? "Gaussian-process" : id === "random_search" ? "Random" : "Standard");
 
 function readRequest() {
@@ -163,11 +162,6 @@ function render(req, view) {
         ? `That is ${fmt(-lifeGain, 0)}% fewer charges than the ${refName} charge, which would need ${fmt(ref.metrics.durationMin, 0)} min.`
         : `That is ${fmt(-lifeGain, 0)}% fewer charges than the ${refName} charge${cmpTime > 0.5 ? `, the price of finishing ${fmt(cmpTime, 1)} min sooner` : ""}.`;
 
-  const splitRows = [...baselines, { ...best, name: "Recommended" }].map((row) => {
-    const L = row.metrics.life;
-    return { name: row.name, cal: L.calShare, charges: L.charges, years: L.years };
-  });
-
   out.innerHTML = `
   <section class="result" aria-labelledby="res-title">
     <h2 class="result-title" id="res-title">The recommended charge</h2>
@@ -204,29 +198,19 @@ function render(req, view) {
     <p class="sub-lede">Capacity after repeated charges like this one, with calendar aging counted on real time: the charge itself plus ${fmt(Math.max(0, usage.hoursBetween - used / 60), 1)} h parked at ${fmt(usage.parkC, 0)} °C until the next charge.</p>
     <div class="charts">
       <article class="panel wide">
-        <div class="legend"><span><i class="sw best"></i>Recommended</span><span><i class="sw ref"></i>${refName}</span><span><i class="sw cal"></i>Calendar aging alone</span><span><i class="sw lim"></i>End of life</span></div>
+        <div class="legend"><span><i class="sw best"></i>Recommended</span><span><i class="sw ref"></i>${refName}</span><span><i class="sw lim"></i>End of life</span></div>
         <div class="plot tall"><canvas id="c-life"></canvas></div>
       </article>
     </div>
-    <h3 class="sub-title">Where the aging comes from</h3>
-    <p class="sub-lede">How the ${100 - usage.eolPct}% capacity loss at end of life splits between calendar and cycle aging, for each way of charging.</p>
-    <div class="split">
-      ${splitRows.map((r) => `<div class="split-row"><strong>${r.name}</strong><div class="bar">
-        <span class="cal" style="width:${100 * r.cal}%">${r.cal > 0.1 ? `${fmt(100 * r.cal, 0)}%` : ""}</span>
-        <span class="cyc" style="width:${100 * (1 - r.cal)}%">${1 - r.cal > 0.1 ? `${fmt(100 * (1 - r.cal), 0)}%` : ""}</span></div>
-        <span class="total">${fmt(r.charges, 0)} charges</span></div>`).join("")}
-    </div>
-    <div class="key"><span><i style="background:#7b8bb5"></i>Calendar aging</span><span><i style="background:var(--blue)"></i>Cycle aging</span></div>
 
     <h3 class="sub-title">Standard charges and the recommendation</h3>
     <div class="table-wrap"><table>
-      <thead><tr><th>Charge</th><th class="n">Time (min)</th><th class="n">Peak °C</th><th class="n">Charges to ${usage.eolPct}%</th><th class="n">Years</th><th class="n">Calendar share</th><th>Within limits</th></tr></thead>
+      <thead><tr><th>Charge</th><th class="n">Time (min)</th><th class="n">Peak °C</th><th class="n">Charges to ${usage.eolPct}%</th><th class="n">Years</th><th>Within limits</th></tr></thead>
       <tbody>
         ${baselines.map((r) => tableRow({ ...r, limit: req.minutes }, false)).join("")}
         ${tableRow({ ...best, name: "Recommended", limit: req.minutes }, true)}
       </tbody>
     </table></div>
-    <p class="fine">${END_TEXT[best.end] || best.end}. Study per-session wear index for the recommended charge (paper closed form): calendar ${sci(best.metrics.qCalendar)}, cycle ${sci(best.metrics.qCyclic)}. Study score versus ${refName}: ${fmt(best.metrics.reward - ref.metrics.reward, 1)}.</p>
 
     <h3 class="sub-title">Best of each schedule type</h3>
     <p class="sub-lede">The best schedule found for each type you ticked, then the next best overall. Row 1 is the recommendation, chosen by ${req.objective === "life" ? "pack life" : "the study score"}; both measures are shown for every row.</p>
@@ -240,7 +224,6 @@ function render(req, view) {
         ${top.map((row, i) => `<tr class="${i === 0 ? "pick" : ""}"><td>${i + 1}</td><td>${row.family}<br><span class="fine">${describeParams(row.familyId, row.params, row.metrics.socEnd, row.metrics.durationMin)}</span></td><td>${methodName(row.method)}</td><td class="n">${fmt(row.metrics.durationMin)}</td><td class="n">${fmt(row.metrics.life.charges, 0)}</td><td class="n">${pct(row.metrics.life.charges / rL.charges - 1)}</td><td class="n">${fmt(row.metrics.reward - ref.metrics.reward, 1)}</td></tr>`).join("")}
       </tbody>
     </table></div>
-    <p class="fine">Study score: 1000 × (2.5 × charge added − 7500 × session wear − 1.1 × hours^0.55), the paper's reward. Higher is better. "Not reached" marks a step the charge ended before.</p>
 
     <h3 class="sub-title">How the trip became a charge</h3>
     <div class="pipeline">
@@ -249,7 +232,6 @@ function render(req, view) {
       <div class="pipe"><b>${fmt(req.energyFraction * 100, 1)}% added</b><span>Each cell holds ${fmt(req.demand.fullWh, 2)} Wh (${Q_AH} Ah at ${fmt(twin.vNom, 2)} V). The charge starts at ${Math.round(SOC_START * 100)}%.</span></div>
       <div class="pipe"><b>${fmt(req.minutes, 0)} min limit</b><span>Current up to ${fmt(SPACE.iMax, 2)} A per cell, voltage up to ${V_MAX.toFixed(1)} V.</span></div>
     </div>
-    <p class="fine">The pack is treated as identical cells. Voltage and temperature come from the digital twin; ${req.cvMode === "hold" ? "at 4.2 V the current tapers as a charger's voltage hold would, using the cell's open-circuit voltage curve" : "at 4.2 V the study rule lowers the current 0.25 A at each touch"}. Cycle aging counts charge ampere-hours, as in the study's fit.</p>
   </section>`;
 
   const bestS = seriesFrom(best.trace, "Recommended", "#1f8a55");
@@ -270,7 +252,6 @@ function render(req, view) {
     series: [
       { name: "Recommended", color: "#1f8a55", x: cb.x, y: cb.y },
       { name: refName, color: "#d9692f", dash: [6, 4], x: cr.x, y: cr.y },
-      { name: "Calendar alone (recommended)", color: "#7b8bb5", dash: [2, 3], x: cb.x, y: cb.cal },
     ],
     guides: [{ y: usage.eolPct }],
     yMin: yLow,
@@ -302,7 +283,7 @@ function legend(refName, limit = false) {
 function tableRow(row, pick) {
   const m = row.metrics;
   const L = m.life;
-  return `<tr class="${pick ? "pick" : ""}"><td>${row.name}</td><td class="n">${fmt(m.durationMin)}</td><td class="n">${fmt(m.peakT)}</td><td class="n">${fmt(L.charges, 0)}</td><td class="n">${fmt(L.years, 1)}</td><td class="n">${fmt(L.calShare * 100, 0)}%</td><td>${within(m, row.end, row.limit)}</td></tr>`;
+  return `<tr class="${pick ? "pick" : ""}"><td>${row.name}</td><td class="n">${fmt(m.durationMin)}</td><td class="n">${fmt(m.peakT)}</td><td class="n">${fmt(L.charges, 0)}</td><td class="n">${fmt(L.years, 1)}</td><td>${within(m, row.end, row.limit)}</td></tr>`;
 }
 
 function draw(id, spec) {
