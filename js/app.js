@@ -3,8 +3,8 @@
  * the study score, and the 600-charge lifetime anchor. Sources are in physics.js. */
 
 import { mountChart } from "./charts.js";
-import { END_TEXT, FAMILIES, baselineParams, describeParams } from "./profiles.js";
-import { N_CELLS, Q_AH, SOC_START, SPACE, V_MAX, WH_PER_KM, lifeToEighty, retentionCurve, tripDemand } from "./physics.js";
+import { FAMILIES, baselineParams, describeParams } from "./profiles.js";
+import { SOC_START, SPACE, V_MAX, lifeToEighty, retentionCurve, tripDemand } from "./physics.js";
 import { planCharge } from "./search.js";
 import { rollout } from "./simulate.js";
 import { loadTwin } from "./twin.js";
@@ -36,7 +36,6 @@ function fmt(n, digits = 1) {
   return n.toLocaleString("en-IN", { maximumFractionDigits: digits, minimumFractionDigits: digits });
 }
 const sci = (n) => (n > 0 ? n.toExponential(2) : "–");
-const methodName = (id) => (id === "gp_bo" ? "Gaussian-process" : id === "random_search" ? "Random" : "Standard");
 
 function sessionFor(fraction, maxMin) {
   return {
@@ -79,7 +78,7 @@ function legend() {
   return '<div class="legend"><span><i class="sw best"></i>Recommended</span><span><i class="sw ref"></i>CCCV 0.5C</span></div>';
 }
 
-function render(req, d, baselines, best, top, tested) {
+function render(req, d, baselines, best, tested) {
   const half = baselines[0];
   const qHalf = half.metrics.qTotal;
   const life = (m) => lifeToEighty(m.qTotal, qHalf).cycles;
@@ -123,23 +122,6 @@ function render(req, d, baselines, best, top, tested) {
         ${[...baselines, { ...best, name: "Recommended" }].map((r) => `<tr class="${r.name === "Recommended" ? "pick" : ""}"><td>${r.name}</td><td class="n">${fmt(r.metrics.durationMin)}</td><td class="n">${fmt(r.metrics.peakT)}</td><td class="n">${sci(r.metrics.qCalendar)}</td><td class="n">${sci(r.metrics.qCyclic)}</td><td class="n">${sci(r.metrics.qTotal)}</td><td class="n">${fmt(life(r.metrics), 0)}</td><td class="n">${fmt(r.metrics.reward, 1)}</td><td>${within(r.metrics, req.minutes)}</td></tr>`).join("")}
       </tbody>
     </table></div>
-    <p class="fine">${END_TEXT[best.end] || best.end}. Study score = 1000 × (2.5 × charge added − 7500 × Q − 1.1 × hours<sup>0.55</sup>), higher is better.</p>
-
-    <h3 class="sub-title">Top six schedules by study score</h3>
-    <div class="table-wrap"><table>
-      <thead><tr><th></th><th>Schedule</th><th>Search</th><th class="n">Time (min)</th><th class="n">Q total</th><th class="n">Charges to 80%</th><th class="n">Study score</th></tr></thead>
-      <tbody>
-        ${top.map((r, i) => `<tr class="${i === 0 ? "pick" : ""}"><td>${i + 1}</td><td>${r.family}<br><span class="fine">${describeParams(r.familyId, r.params)}</span></td><td>${methodName(r.method)}</td><td class="n">${fmt(r.metrics.durationMin)}</td><td class="n">${sci(r.metrics.qTotal)}</td><td class="n">${fmt(life(r.metrics), 0)}</td><td class="n">${fmt(r.metrics.reward, 1)}</td></tr>`).join("")}
-      </tbody>
-    </table></div>
-
-    <h3 class="sub-title">How the trip became a charge</h3>
-    <div class="pipeline">
-      <div class="pipe"><b>${fmt(d.packKwh, 2)} kWh</b><span>${fmt(req.km, 0)} km × ${fmt(WH_PER_KM, 1)} Wh/km.</span></div>
-      <div class="pipe"><b>${fmt(d.cellWh, 2)} Wh per cell</b><span>Shared across ${N_CELLS.toLocaleString("en-IN")} cells.</span></div>
-      <div class="pipe"><b>${fmt(d.energyFraction * 100, 1)}% added</b><span>Each cell holds ${fmt(d.fullWh, 2)} Wh (${Q_AH} Ah × ${fmt(twin.vNom, 3)} V). The charge starts at ${Math.round(SOC_START * 100)}%.</span></div>
-      <div class="pipe"><b>${fmt(req.minutes, 0)} min limit</b><span>Current up to ${fmt(SPACE.iMax, 2)} A per cell, voltage up to ${V_MAX.toFixed(1)} V.</span></div>
-    </div>
   </section>`;
 
   const b = series(best.trace, "Recommended", "#1f8a55");
@@ -205,7 +187,7 @@ async function run(evt) {
   progress.hidden = true;
   go.disabled = false;
   for (const key of Object.keys(charts)) delete charts[key];
-  render(req, d, baselines, best, result.top, result.tested);
+  render(req, d, baselines, best, result.tested);
 }
 
 function fail(err) {
