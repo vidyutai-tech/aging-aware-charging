@@ -1,6 +1,6 @@
 /** Closed-loop charge on the digital-twin step, with the study's schedule rules. */
 
-import { energyDeliveredJ, scoreSession } from "./physics.js";
+import { energyDeliveredJ, scoreSession } from "./physics.js?v=3";
 
 function prefixEnergy(voltage, current, n) {
   return energyDeliveredJ(voltage.slice(0, n), current.slice(0, n));

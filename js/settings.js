@@ -2,7 +2,7 @@
  * Defaults come from physics.js (config.py in the research code). readSettings() turns the panel
  * into the objects the session, search, score and wear model read. */
 
-import { DEG, SPACE, V_MAX } from "./physics.js";
+import { DEG, SPACE, V_MAX } from "./physics.js?v=3";
 
 const TWIN_I_MAX = 4.616; // highest current in the twin table
 const TWIN_V_MAX = 4.3; // highest voltage in the twin table
@@ -48,7 +48,7 @@ export const GROUPS = [
     title: "Discrete currents",
     note: "As --discrete-current in the research code: every current snaps to the nearest level, and each later step stays at or below the one before. The CCCV comparison charges are not snapped.",
     items: [
-      { key: "discrete", label: "Use discrete current levels", type: "check", def: false },
+      { key: "discrete", label: "Use discrete current levels", type: "check", def: true },
       { key: "levels", label: "Levels", unit: "A", type: "text", def: "1.0, 1.5, 2.0, 3.0, 4.5" },
     ],
   },
