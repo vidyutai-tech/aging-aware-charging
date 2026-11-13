@@ -65,7 +65,6 @@ button, input, select { font: inherit; color: inherit; }
 }
 
 .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }
 .tiles.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .tiles.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .num input.wide { width: 7.4em; }
@@ -97,9 +96,6 @@ button, input, select { font: inherit; color: inherit; }
 .presets button.on { background: var(--blue); border-color: var(--blue); color: #fff; }
 
 .note { color: var(--muted); font-size: 15px; margin: 12px 0 0; }
-.pack { margin-top: 16px; }
-.pack summary { cursor: pointer; font-weight: 700; color: var(--heading); }
-.pack .tiles { margin-top: 14px; }
 
 /* Schedule kinds */
 .kinds { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
@@ -178,7 +174,7 @@ button, input, select { font: inherit; color: inherit; }
 .vcard .k { color: var(--muted); font-size: 15px; }
 .vcard .v { font-size: 28px; font-weight: 700; }
 .vcard .s { color: var(--muted); font-size: 15px; }
-.vcard.best .v, .vcard.gain .v { color: var(--best); }
+.vcard.best .v { color: var(--best); }
 .vcard.ref .v { color: var(--ref); }
 .vcard.gain .v { color: var(--best); }
 
@@ -221,7 +217,7 @@ button, input, select { font: inherit; color: inherit; }
 .plot { position: relative; height: 260px; }
 .panel.wide { grid-column: 1 / -1; }
 .bars { display: grid; gap: 14px; padding: 10px 4px 8px; }
-.bar-row { display: grid; grid-template-columns: minmax(110px, 1.2fr) 3fr 120px 180px; gap: 14px; align-items: center; font-size: 16px; }
+.bar-row { display: grid; grid-template-columns: minmax(110px, 1.2fr) 3fr 160px 180px; gap: 14px; align-items: center; font-size: 16px; }
 .bar-row.pick .bar-name, .bar-item.pick .bar-name { font-weight: 700; color: var(--heading); }
 /* Expandable rows: the summary is the bar, the body shows the calculation. */
 .bar-item > summary { list-style: none; cursor: pointer; border-radius: 10px; padding: 4px 0; }
@@ -251,7 +247,7 @@ button, input, select { font: inherit; color: inherit; }
 .bar-val.muted { color: var(--muted); font-weight: 400; }
 .bar-money { text-align: right; font-size: 15px; color: var(--muted); }
 .bar-money b { color: var(--heading); }
-.bars-head { display: grid; grid-template-columns: minmax(110px, 1.2fr) 3fr 120px 180px; gap: 14px; font-size: 14px; color: var(--muted); }
+.bars-head { display: grid; grid-template-columns: minmax(110px, 1.2fr) 3fr 160px 180px; gap: 14px; font-size: 14px; color: var(--muted); }
 .bars-head span:nth-child(n+3) { text-align: right; }
 .plot.tall { height: 330px; }
 .plot canvas { width: 100%; height: 100%; display: block; }

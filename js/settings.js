@@ -2,7 +2,7 @@
  * Defaults come from physics.js (config.py in the research code). readSettings() turns the panel
  * into the objects the session, search, score and wear model read. */
 
-import { DEG, SPACE, V_MAX } from "./physics.js?v=3";
+import { DEG, SPACE, V_MAX } from "./physics.js";
 
 const TWIN_I_MAX = 4.616; // highest current in the twin table
 const TWIN_V_MAX = 4.3; // highest voltage in the twin table
@@ -91,7 +91,7 @@ export const GROUPS = [
       { key: "B2", label: "Cycling B at 2C", def: DEG.B[2], wide: true },
       { key: "EaCyc", label: "Cycling Ea", unit: "J/mol", def: DEG.Ea[0], wide: true },
       { key: "zCyc", label: "Cycling exponent z", def: DEG.z[0], wide: true },
-      { key: "lifeRef", label: "Charges to 80% for CCCV 0.5C", def: 600, min: 1, step: 10, int: true },
+      { key: "lifeRef", label: "Cycles to 80% for CCCV 0.5C", def: 600, min: 1, step: 10, int: true },
     ],
   },
   {

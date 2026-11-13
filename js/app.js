@@ -4,7 +4,7 @@
 
 import { mountChart } from "./charts.js";
 import { FAMILIES, baselineParams, describeParams } from "./profiles.js";
-import { CELL_WH, N_CELLS, SOC_START, WH_PER_KM, lifeToEighty, tripDemand } from "./physics.js?v=3";
+import { CELL_WH, N_CELLS, SOC_START, WH_PER_KM, lifeToEighty, tripDemand } from "./physics.js";
 import { planCharge } from "./search.js";
 import { buildAdvanced, readSettings } from "./settings.js";
 import { rollout } from "./simulate.js";
@@ -18,13 +18,14 @@ const progress = $("progress");
 const bar = $("bar");
 const go = $("go");
 const twin = loadTwin(globalThis.PACK_DATA);
-const rupees = (n) => `₹${Math.round(Math.abs(n)).toLocaleString("en-IN")}`;
 const charts = {};
 
 function fmt(n, digits = 1) {
   if (n == null || !Number.isFinite(n)) return "–";
   return n.toLocaleString("en-IN", { maximumFractionDigits: digits, minimumFractionDigits: digits });
 }
+
+const SOC0_MAX = 0.3; // starting charge is limited to 30%
 
 function vehicle() {
   const eff = Number($("eff").value); // kWh/km
@@ -36,7 +37,7 @@ function vehicle() {
     whkm: whkm > 0 ? whkm : WH_PER_KM,
     cells: cells > 0 ? cells : N_CELLS,
     cellWh: cellWh > 0 ? cellWh : CELL_WH,
-    socStart: Number.isFinite(soc0) ? Math.min(0.7, Math.max(0.05, soc0)) : SOC_START,
+    socStart: Number.isFinite(soc0) ? Math.min(SOC0_MAX, Math.max(0.05, soc0)) : SOC_START,
   };
 }
 
@@ -82,8 +83,10 @@ function legend(limit = null) {
   return `<div class="legend"><span><i class="sw best"></i>Recommended</span><span><i class="sw ref"></i>CCCV 0.5C</span>${limit != null ? `<span><i class="sw lim"></i>${fmt(limit, 2)} V limit</span>` : ""}</div>`;
 }
 
-/* Lifetime bars. For each schedule type: extra charges to 80% against CCCV 0.5C, the energy those
- * charges hold (extra charges × pack capacity), and the distance that energy drives (÷ efficiency).
+const rupees = (n) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+
+/* Lifetime bars. For each schedule type: extra cycles to 80% against CCCV 0.5C, the energy those
+ * cycles hold (extra cycles × pack capacity), and the distance that energy drives (÷ efficiency).
  * Each row opens to show the calculation step by step. */
 function lifeBars(rows, best, life, cost, ref, d) {
   const packKwh = d.packCapacityKwh;
@@ -104,13 +107,13 @@ function lifeBars(rows, best, life, cost, ref, d) {
     return v >= 0 ? `<b>${rupees(v)}</b> saved` : `<b>${rupees(-v)}</b> extra cost`;
   };
   const steps = (it) => `<ol class="calc">
-      <li><span>Charges to 80% capacity</span><span>CCCV 0.5C reference: <b>${fmt(ref, 0)}</b>. ${it.name}: <b>${fmt(it.cycles, 1)}</b> (${signed(it.pct, 1)}%)</span></li>
-      <li><span>Extra charges</span><span>${fmt(it.cycles, 1)} − ${fmt(ref, 0)} = <b>${signed(it.extra, 1)}</b></span></li>
+      <li><span>Cycles to 80% capacity</span><span>CCCV 0.5C reference: <b>${fmt(ref, 0)}</b>. ${it.name}: <b>${fmt(it.cycles, 1)}</b> (${signed(it.pct, 1)}%)</span></li>
+      <li><span>Extra cycles</span><span>${fmt(it.cycles, 1)} − ${fmt(ref, 0)} = <b>${signed(it.extra, 1)}</b></span></li>
       <li><span>Pack capacity</span><span>${d.nCells.toLocaleString("en-IN")} cells × ${fmt(d.fullWh, 2)} Wh = <b>${fmt(packKwh, 2)} kWh</b></span></li>
       <li><span>Extra energy over the pack life</span><span>${signed(it.extra, 1)} × ${fmt(packKwh, 2)} kWh = <b>${signed(it.kwh, 1)} kWh</b></span></li>
-      <li><span>Extra distance</span><span>${signed(it.kwh, 1)} kWh ÷ ${fmt(eff, 3)} kWh/km = <b>${signed(it.km, 0)} km</b></span></li>
+      <li><span>Extra distance till battery replacement</span><span>${signed(it.kwh, 1)} kWh ÷ ${fmt(eff, 3)} kWh/km = <b>${signed(it.km, 0)} km</b></span></li>
     </ol>`;
-  return `<div class="bars"><div class="bars-head"><span>Schedule</span><span></span><span>Extra km</span><span>Money saved</span></div>${items.map((it) => {
+  return `<div class="bars"><div class="bars-head"><span>Schedule</span><span></span><span>Extra km till battery replacement</span><span>Money saved</span></div>${items.map((it) => {
     if (it.km == null) return `<div class="bar-row"><span class="bar-name">${it.name}</span><span class="bar-track"></span><span class="bar-val muted">Did not finish in time</span><span class="bar-money">–</span></div>`;
     const w = (Math.abs(it.km) / span) * 50;
     const up = it.km >= 0;
@@ -144,20 +147,19 @@ function render(req, d, baselines, best, top, tested, byFamily, cfg) {
         <div class="big">${best.family}</div>
         <p class="big-sub">${describeParams(best.familyId, best.params)}</p>
       </div>
-      <div class="vcard best"><div class="k">Recommended</div><div class="v">${fmt(best.metrics.durationMin, 1)} min</div><div class="s">${best.metrics.feasible ? `${fmt(life(best.metrics), 0)} charges to 80% capacity` : "Trip energy not delivered"}</div></div>
-      <div class="vcard ref"><div class="k">CCCV 0.5C</div><div class="v">${fmt(half.metrics.durationMin, 1)} min</div><div class="s">${ref} charges to 80% capacity (reference)</div></div>
+      <div class="vcard best"><div class="k">Recommended</div><div class="v">${fmt(best.metrics.durationMin, 1)} min</div><div class="s">${best.metrics.feasible ? `${fmt(life(best.metrics), 0)} cycles to 80% capacity` : "Trip energy not delivered"}</div></div>
+      <div class="vcard ref"><div class="k">CCCV 0.5C</div><div class="v">${fmt(half.metrics.durationMin, 1)} min</div><div class="s">${ref} cycles to 80% capacity (reference)</div></div>
       ${gain}
     </div>
 
     <div class="charts">
       <article class="panel"><h4>Charge current</h4>${legend()}<div class="plot"><canvas id="c-i"></canvas></div></article>
       <article class="panel"><h4>Cell voltage</h4>${legend(cfg.vMax)}<div class="plot"><canvas id="c-v"></canvas></div></article>
-      <article class="panel"><h4>Cell temperature</h4>${legend()}<div class="plot"><canvas id="c-t"></canvas></div></article>
       <article class="panel"><h4>State of charge</h4>${legend()}<div class="plot"><canvas id="c-s"></canvas></div></article>
     </div>
 
     <h3 class="sub-title">Lifetime compared with normal usage</h3>
-    <p class="sub-lede">Extra distance the pack can drive before it reaches 80% capacity, against CCCV 0.5C (${ref} charges), for the best schedule of each type searched. Extra distance = extra charges × pack capacity ÷ efficiency. Money saved is the change in charges multiplied by the battery cost of ${rupees(req.cost)}. Open a row to see the calculation.</p>
+    <p class="sub-lede">Extra distance the pack can drive before it reaches 80% capacity, against CCCV 0.5C (${ref} cycles), for the best schedule of each type searched. Extra distance = extra cycles × pack capacity ÷ efficiency. Money saved is the change in cycles multiplied by the battery cost of ${rupees(req.cost)}. Open a row to see the calculation.</p>
     <div class="charts">
       <article class="panel wide">${lifeBars(byFamily, best, life, req.cost, cfg.lifeRef, d)}</article>
     </div>
@@ -168,7 +170,6 @@ function render(req, d, baselines, best, top, tested, byFamily, cfg) {
   const fx = (x) => `${x.toFixed(1)} min`;
   draw("c-i", { xLabel: "Time (min)", yLabel: "Current (A)", series: [b.amps, r.amps], yMin: 0, formatY: (y) => `${y.toFixed(2)} A`, formatX: fx });
   draw("c-v", { xLabel: "Time (min)", yLabel: "Voltage (V)", series: [b.volt, r.volt], guides: [{ y: cfg.vMax }], yMin: 3.6, yMax: 4.3, formatY: (y) => `${y.toFixed(3)} V`, formatX: fx });
-  draw("c-t", { xLabel: "Time (min)", yLabel: "Temperature (°C)", series: [b.temp, r.temp], formatY: (y) => `${y.toFixed(2)} °C`, formatX: fx });
   draw("c-s", { xLabel: "Time (min)", yLabel: "State of charge (%)", series: [b.soc, r.soc], yMin: 0, yMax: 100, formatY: (y) => `${y.toFixed(1)}%`, formatX: fx });
 }
 
@@ -249,6 +250,13 @@ for (const btn of vehicleButtons) {
 for (const id of ["cells", "eff"]) $(id).addEventListener("input", markVehicle);
 
 buildAdvanced($("adv-grid"), $("adv-count"), $("adv-reset"));
+
+// Starting charge above 30% (or below 5%) is pulled back into range when the box loses focus.
+$("soc0").addEventListener("change", () => {
+  const el = $("soc0");
+  if (el.value !== "") el.value = String(Math.min(SOC0_MAX * 100, Math.max(5, Number(el.value) || 0)));
+  updatePackNote();
+});
 
 for (const id of ["km", "eff", "cells", "cellwh", "soc0"]) $(id).addEventListener("input", updatePackNote);
 updatePackNote();

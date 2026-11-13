@@ -1,6 +1,6 @@
 /** Charging schedules: constant-current/constant-voltage, two-step, three-step, pulsed. */
 
-import { SPACE, clamp } from "./physics.js?v=3";
+import { SPACE, clamp } from "./physics.js";
 
 function twoSoc(sp) {
   const hi = sp.socSwitchMax;

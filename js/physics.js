@@ -194,7 +194,7 @@ export function scoreSession(current, voltage, temperature, session, weights) {
   };
 }
 
-/** 0.5C charge is anchored at 80% capacity after `anchor` equivalent charges (600 in the study). */
+/** 0.5C charge is anchored at 80% capacity after `anchor` equivalent cycles (600 in the study). */
 export function lifeToEighty(qSession, qHalf, anchor = 600) {
   if (!(qSession > 0) || !(qHalf > 0)) return { cycles: null, extra: null, replacementRatio: null };
   const cycles = anchor * qHalf / qSession;
