@@ -18,7 +18,7 @@
   <main class="page">
     <form class="sheet" id="planner" novalidate>
       <h2 class="sheet-title">Plan the charge</h2>
-      <p class="sheet-lede">Enter the trip, the time you have at the charger and how the car is used.</p>
+      <p class="sheet-lede">Enter the trip and the time you have at the charger.</p>
 
       <section class="step">
         <h3><span class="badge">1</span>The trip</h3>
@@ -42,34 +42,7 @@
       </section>
 
       <section class="step">
-        <h3><span class="badge">2</span>The vehicle and how it is used</h3>
-        <div class="tiles four">
-          <label class="tile">
-            <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><path d="M6 30l5-12h26l5 12v8H6z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="38" r="4" fill="#fff" stroke="currentColor" stroke-width="3"/><circle cx="34" cy="38" r="4" fill="#fff" stroke="currentColor" stroke-width="3"/><path d="M25 20l-4 6h6l-4 6" fill="none" stroke="#f2b632" stroke-width="2.5"/></svg>
-            <span class="tile-body"><span class="tile-name">Energy use</span>
-            <span class="num"><input id="whkm" type="number" min="60" max="400" step="1" value="135"><span class="unit">Wh/km</span></span></span>
-          </label>
-          <label class="tile">
-            <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="8" width="9" height="32" rx="2"/><rect x="19.5" y="8" width="9" height="32" rx="2"/><rect x="33" y="8" width="9" height="32" rx="2"/></g><path d="M8 30h5M21.5 30h5M35 30h5" stroke="#2e9e62" stroke-width="6"/></svg>
-            <span class="tile-body"><span class="tile-name">Cells in the pack</span>
-            <span class="num"><input id="cells" type="number" min="100" max="20000" step="1" value="6831"><span class="unit">cells</span></span></span>
-          </label>
-          <label class="tile">
-            <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="9" width="38" height="33" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><path d="M5 18h38M14 4v9M34 4v9" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="30" r="4" fill="#f2b632"/></svg>
-            <span class="tile-body"><span class="tile-name">Time between charges</span>
-            <span class="num"><input id="hours" type="number" min="2" max="336" step="1" value="24"><span class="unit">h</span></span></span>
-          </label>
-          <label class="tile">
-            <svg class="ico" viewBox="0 0 48 48" aria-hidden="true"><path d="M20 30V9a4 4 0 0 1 8 0v21a8 8 0 1 1-8 0z" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="24" cy="37" r="4" fill="#d9692f"/><path d="M24 33V18" stroke="#d9692f" stroke-width="3"/></svg>
-            <span class="tile-body"><span class="tile-name">Parked temperature</span>
-            <span class="num"><input id="park" type="number" min="-10" max="50" step="1" value="25"><span class="unit">°C</span></span></span>
-          </label>
-        </div>
-        <p class="note" id="pack-note"></p>
-      </section>
-
-      <section class="step">
-        <h3><span class="badge">3</span>Charging schedules to search</h3>
+        <h3><span class="badge">2</span>Charging schedules to search</h3>
         <div class="kinds">
           <label class="kind"><input type="checkbox" name="family" value="cccv" checked>
             <span class="kind-name">CCCV</span><span class="kind-desc">Constant current, then a voltage hold</span>
