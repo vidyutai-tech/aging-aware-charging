@@ -17,6 +17,40 @@ function threeSoc(sp) {
   return [[soc1Lo, soc1Hi], [soc2Lo, soc2Hi]];
 }
 
+/* Discrete current mode (optimization.py _place_currents): snap to the nearest level, ties to the lower one,
+ * and keep each later step current at or below the one before. Off when sp.levels is empty. */
+function snapTo(x, levels) {
+  let best = levels[0];
+  for (const l of levels) if (Math.abs(l - x) < Math.abs(best - x) - 1e-12) best = l;
+  return best;
+}
+
+function descending(values, levels) {
+  const out = [];
+  let cap = null;
+  for (const raw of values) {
+    const snapped = snapTo(raw, levels);
+    if (cap == null) out.push(snapped);
+    else {
+      const allowed = levels.filter((l) => l <= cap + 1e-9);
+      out.push(allowed.length ? snapTo(snapped, allowed) : cap);
+    }
+    cap = out[out.length - 1];
+  }
+  return out;
+}
+
+function placeCurrents(values, sp) {
+  const levels = sp.levels;
+  if (!levels || !levels.length) return values;
+  const out = { ...values };
+  if ("i_cc" in out) out.i_cc = snapTo(out.i_cc, levels);
+  const keys = ["i1", "i2", "i3"].filter((k) => k in out);
+  if (keys.length) descending(keys.map((k) => out[k]), levels).forEach((l, i) => { out[keys[i]] = l; });
+  if ("i_charge" in out && "i_floor" in out) [out.i_charge, out.i_floor] = descending([out.i_charge, out.i_floor], levels);
+  return out;
+}
+
 function uniqueSeeds(rows, clip) {
   const seen = new Set();
   const out = [];
@@ -46,7 +80,7 @@ export const FAMILIES = {
       const iCc = clamp(values.i_cc, sp.iMin, sp.iMax);
       const vCv = clamp(values.v_cv, sp.vCvMin, sp.vCvMax);
       const iCut = clamp(values.i_cutoff, 0.01, Math.min(0.5, iCc - sp.cvStep));
-      return { i_cc: iCc, v_cv: vCv, i_cutoff: iCut };
+      return placeCurrents({ i_cc: iCc, v_cv: vCv, i_cutoff: iCut }, sp);
     },
     seeds(sp = SPACE) {
       const ref = { i_cc: 2, v_cv: 4.2, i_cutoff: 0.05 };
@@ -128,7 +162,7 @@ export const FAMILIES = {
         i2 = clamp(i2Raw, sp.iMin, Math.max(sp.iMin, i1 - sp.minStepDi));
         socSw = clamp(values.soc_switch, socLo, socHi);
       }
-      return { i1, i2, soc_switch: socSw };
+      return placeCurrents({ i1, i2, soc_switch: socSw }, sp);
     },
     seeds(sp = SPACE) {
       const [socLo, socHi] = twoSoc(sp);
@@ -196,7 +230,7 @@ export const FAMILIES = {
       }
       const soc1 = clamp(values.soc1, s1lo, s1hi);
       const soc2 = clamp(values.soc2, Math.max(s2lo, soc1 + sp.minStageGap), s2hi);
-      return { i1, i2, i3, soc1, soc2 };
+      return placeCurrents({ i1, i2, i3, soc1, soc2 }, sp);
     },
     seeds(sp = SPACE) {
       const [[s1lo, s1hi], [, s2hi]] = threeSoc(sp);
@@ -257,13 +291,13 @@ export const FAMILIES = {
       const pulseOn = clamp(values.pulse_on_min, sp.pulseOnMin, sp.pulseOnMax);
       const restFrac = clamp(values.rest_fraction, sp.restFracMin, sp.restFracMax);
       const iFloor = clamp(values.i_floor, sp.iMin, Math.min(iCc - 0.05, sp.iMax));
-      return {
+      return placeCurrents({
         i_charge: iCc,
         pulse_on_min: pulseOn,
         pulse_rest_min: Math.max(0.5, pulseOn * restFrac),
         rest_fraction: restFrac,
         i_floor: iFloor,
-      };
+      }, sp);
     },
     seeds(sp = SPACE) {
       const base = { i_charge: 1, pulse_on_min: 10, rest_fraction: 2, i_floor: 0.75 };

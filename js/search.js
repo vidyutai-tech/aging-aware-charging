@@ -104,7 +104,7 @@ function rbf(a, b, length) {
   return Math.exp(-0.5 * s);
 }
 
-function propose(xs, ys, family, space, rng, acq, xi) {
+function propose(xs, ys, family, space, rng, acq, xi, length = 0.35) {
   const n = xs.length;
   const dim = xs[0].length;
   let mean = 0;
@@ -113,7 +113,6 @@ function propose(xs, ys, family, space, rng, acq, xi) {
   let sf = 0;
   for (const y of ys) sf += (y - mean) ** 2;
   sf = Math.max(sf / n, 1e-8);
-  const length = 0.35;
   const noise = 1e-6 * sf + 1e-9;
   const K = Array.from({ length: n }, () => new Float64Array(n));
   for (let i = 0; i < n; i++) {
@@ -216,7 +215,7 @@ async function searchFamily(family, session, twin, opts, method, onTick) {
       const ys = history.map((h) => h.loss);
       let params;
       try {
-        params = propose(xs, ys, family, session.space, rng, opts.acq, 0.01);
+        params = propose(xs, ys, family, session.space, rng, opts.acq, opts.xi ?? 0.01, opts.gpLength ?? 0.35);
       } catch {
         params = family.sample(rng, session.space);
       }
@@ -241,6 +240,7 @@ export async function planCharge(session, twin, options, onProgress) {
       await searchFamily(families[f], session, twin, { ...options, seed }, methods[m], async (row) => {
         tested += 1;
         consider(row, row.feasible ? feasible : fallback);
+        // Best schedule of each type: a feasible one beats any infeasible one, then lowest loss.
         const cur = byFamily[row.familyId];
         if (!cur || (row.feasible && !cur.feasible) || (row.feasible === cur.feasible && row.loss < cur.loss)) byFamily[row.familyId] = row;
         if (tested % 2 === 0 && onProgress) {
